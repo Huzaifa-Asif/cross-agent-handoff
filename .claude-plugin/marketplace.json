@@ -3,6 +3,9 @@
   "owner": {
     "name": "Huzaifa Asif"
   },
+  "metadata": {
+    "description": "Local tools and skills for reviewable work-context handoffs between coding assistants."
+  },
   "plugins": [
     {
       "name": "cross-agent-handoff",

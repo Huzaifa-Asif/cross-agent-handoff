@@ -1,4 +1,4 @@
-# Cross-Agent Handoff host plugins (0.4.0)
+# Cross-Agent Handoff host plugins (0.4.1)
 
 The Codex, Claude Code and Cursor packages expose the same local, stateless MCP tools and a guided handoff skill. They help an assistant prepare and inspect explicitly supplied context; they do not fetch hidden histories, transfer code files, call another vendor, or migrate native sessions. The standalone manual CLI remains available.
 
@@ -6,7 +6,7 @@ The Codex, Claude Code and Cursor packages expose the same local, stateless MCP 
 
 ## Requirements and privacy
 
-Python 3.11+ must already be available as `python3` on the executing machine. Current native host UI flows are unrun unless separately recorded. Linux Python 3.12 and 3.13 are the tested runtime families; Python 3.11, macOS and Windows are not verified for this plugin release. No third-party runtime dependency, API key, network endpoint, account or paid hosting is required by the server. Your host subscription and policies are separate.
+Python 3.11+ must already be available as `python3` on the executing machine. Current native host UI flows are unrun unless separately recorded. The v0.4.0 baseline passed Ubuntu/macOS CI on Python 3.11–3.13 and local macOS Python 3.14 tests. The v0.4.1 checkpoint records patch-specific checks; Windows remains unverified. No third-party runtime dependency, API key, network endpoint, account or paid hosting is required by the server. Your host subscription and policies are separate.
 
 The server accepts inline JSON/Markdown only, uses no files or network, and retains no application state after a request. The host receives arguments and results and can send or retain them under its policies. This is **not** a guarantee that your model provider never sees handoff content. Review every field and get authorization before cross-provider sharing. See [privacy](privacy.md) and [security](../SECURITY.md).
 
@@ -15,7 +15,7 @@ The server accepts inline JSON/Markdown only, uses no files or network, and reta
 From the repository root:
 
 ```sh
-python3 scripts/build_plugins.py --output dist/plugins-0.4.0
+python3 scripts/build_plugins.py --output dist/plugins-0.4.1
 ```
 
 The output directory must not exist. Choose a new directory for another build. It contains three standalone ZIPs, expanded `plugins/codex`, `plugins/claude` and `plugins/cursor` directories, host marketplace catalogs and `manifest.json` with file counts and SHA-256 values. All runtime copies come from the same source files. There are no symlinks, executable hooks, installer scripts or credentials.
@@ -27,7 +27,7 @@ Inspect a ZIP before extracting it to a directory you choose. Generated archives
 After reviewing the generated marketplace, run:
 
 ```sh
-codex plugin marketplace add /absolute/path/to/dist/plugins-0.4.0
+codex plugin marketplace add /absolute/path/to/dist/plugins-0.4.1
 ```
 
 Open the ChatGPT desktop app's Plugins Directory, select `huzaifa-cross-agent-handoff`, install `cross-agent-handoff`, and test in a new local-execution thread. Follow host trust/permission prompts; do not disable them. An isolated Codex CLI 0.166.0-alpha.1 marketplace add, plugin add and plugin list smoke test passed using a disposable CODEX_HOME, without accessing a user account or invoking a model. That verifies CLI package discovery/installation, not the desktop UI or a model-driven workflow. The Codex package uses root `plugin.json`, `mcp.json` and the built-in `${PLUGIN_ROOT}` variable. The server starts with `python3 -B` to avoid bytecode cache writes.
@@ -39,18 +39,18 @@ This local marketplace is not the universal public directory. OpenAI's current d
 For a session-only test, run:
 
 ```sh
-claude --plugin-dir /absolute/path/to/dist/plugins-0.4.0/plugins/claude
+claude --plugin-dir /absolute/path/to/dist/plugins-0.4.1/plugins/claude
 ```
 
 For marketplace distribution, validate before installation:
 
 ```sh
-claude plugin validate /absolute/path/to/dist/plugins-0.4.0/plugins/claude --strict
-claude plugin marketplace add /absolute/path/to/dist/plugins-0.4.0
+claude plugin validate /absolute/path/to/dist/plugins-0.4.1/plugins/claude --strict
+claude plugin marketplace add /absolute/path/to/dist/plugins-0.4.1
 claude plugin install cross-agent-handoff@huzaifa-cross-agent-handoff
 ```
 
-The package uses `.claude-plugin/plugin.json`, `.mcp.json` and `${CLAUDE_PLUGIN_ROOT}`. Claude Code's host validator and real skill/tool interaction must be run on a machine with that CLI before claiming native-host verification. The packaged MCP launch itself is exercised by protocol tests.
+The package uses `.claude-plugin/plugin.json`, `.mcp.json` and `${CLAUDE_PLUGIN_ROOT}`. Claude Code 2.1.220 strict native validation passed for the v0.4.1 plugin and generated marketplace. An isolated v0.4.0 install/list/inventory check also passed. Real skill/tool interaction in a model session remains unrun. Packaged MCP launches are exercised by protocol tests.
 
 Anthropic's directory is a separate submission/review route at [claude.ai/directory/manage](https://claude.ai/directory/manage), requiring an eligible paid account. This package targets **Claude Code**: local stdio support on claude.ai chat or Cowork is not claimed. Public directory availability and official marketplace membership must be verified separately.
 
@@ -65,7 +65,7 @@ For a direct local MCP test without installing the plugin, merge this server ent
   "mcpServers": {
     "cross-agent-handoff": {
       "command": "python3",
-      "args": ["-B", "/absolute/path/to/dist/plugins-0.4.0/plugins/cursor/handoff_mcp.py"]
+      "args": ["-B", "/absolute/path/to/dist/plugins-0.4.1/plugins/cursor/handoff_mcp.py"]
     }
   }
 }
@@ -75,7 +75,7 @@ Then enable the server and inspect its tools in Cursor. This tests MCP tools onl
 
 ## Runtime and package verification
 
-The package tests check deterministic archives, exact source parity, safe member paths, catalog targets and all three packaged stdio launches from paths containing spaces. Host variable substitution is simulated for the launch checks. Claude Code and Cursor native install tests are not yet run. No directory submission or approval is established by these tests.
+The package tests check deterministic archives, exact source parity, safe member paths, catalog targets and all three packaged stdio launches from paths containing spaces. Host variable substitution is simulated for the launch checks. Claude Code isolated v0.4.0 installation and strict v0.4.1 manifest/catalog validation passed; Cursor native installation remains unrun. No directory submission or approval is established by these tests.
 
 ## Tool workflow
 
