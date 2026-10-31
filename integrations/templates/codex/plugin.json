@@ -1,6 +1,6 @@
 {
   "name": "cross-agent-handoff",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Prepare, validate and continue explicit portable work handoffs locally.",
   "author": {
     "name": "Huzaifa Asif"

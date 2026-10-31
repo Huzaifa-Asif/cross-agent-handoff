@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 — 2026-10-31
+
+- Add the Claude marketplace description in the source generator so strict native validation passes without warnings.
+- Cover nonempty marketplace metadata and consistent host manifest/archive versions in package regression tests.
+- Preserve v0.4.0; publish fresh versioned packages. Handoff behavior and schema are unchanged.
+
 ## 0.4.0 — 2026-10-31
 
 - Add bounded stateless stdio MCP validate/export/import/compare/continue/redact tools operating only on explicitly supplied text.

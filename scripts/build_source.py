@@ -10,7 +10,7 @@ files = [p for p in root.rglob('*') if p.is_file() and not p.is_symlink()
          and '__pycache__' not in p.parts and p.suffix != '.pyc']
 dest = root / 'dist'
 dest.mkdir(exist_ok=True)
-archive = dest / 'cross-agent-handoff-0.4.0-source.zip'
+archive = dest / 'cross-agent-handoff-0.4.1-source.zip'
 with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as out:
     for path in sorted(files):
         info = zipfile.ZipInfo('cross-agent-handoff/' + path.relative_to(root).as_posix(), (2026, 1, 1, 0, 0, 0))

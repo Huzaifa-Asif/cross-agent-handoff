@@ -90,6 +90,23 @@ class PackageTests(unittest.TestCase):
                                          'handoff_compare', 'handoff_continue', 'handoff_redact'})
                 self.assertFalse(list(out.rglob('__pycache__')))
 
+    def test_release_metadata_and_claude_marketplace_description(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp) / 'marketplace'
+            results = builder.build(out)
+            catalog = json.loads((out / '.claude-plugin/marketplace.json').read_text())
+            description = catalog['metadata']['description']
+            self.assertIsInstance(description, str)
+            self.assertTrue(description.strip())
+            for host, manifest in (
+                ('codex', 'plugin.json'),
+                ('claude', '.claude-plugin/plugin.json'),
+                ('cursor', '.cursor-plugin/plugin.json'),
+            ):
+                plugin = json.loads((out / 'plugins' / host / manifest).read_text())
+                self.assertEqual(plugin['version'], builder.VERSION)
+                self.assertEqual(results[host]['archive'], f'cross-agent-handoff-{builder.VERSION}-{host}.zip')
+
 
 if __name__ == '__main__':
     unittest.main()

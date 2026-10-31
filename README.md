@@ -6,7 +6,7 @@ A good handoff says what you were trying to do, why choices were made, which exa
 
 ## Local host plugins
 
-Version 0.4.0 adds six stateless stdio MCP tools and host-specific Codex, Claude Code and Cursor plugin bundles. See [installation and publication status](docs/platform-plugins.md) and [privacy](docs/privacy.md). Build locally with `python3 scripts/build_plugins.py --output dist/plugins-0.4.0`. No official directory listing or native host UI verification is claimed.
+Version 0.4.0 introduced six stateless stdio MCP tools and host-specific Codex, Claude Code and Cursor plugin bundles. See [installation and publication status](docs/platform-plugins.md) and [privacy](docs/privacy.md). Build locally with `python3 scripts/build_plugins.py --output dist/plugins-0.4.1`. Version 0.4.1 fixes strict Claude marketplace metadata validation. No official directory listing or native host UI verification is claimed.
 
 ## Quick start
 

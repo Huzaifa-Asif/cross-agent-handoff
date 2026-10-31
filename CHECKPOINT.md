@@ -1,25 +1,26 @@
-# Cross-Agent Handoff 0.4.0 verification checkpoint
+# Cross-Agent Handoff 0.4.1 verification checkpoint
 
-Checked 2026-10-31. This snapshot extends the public-safe 0.3.0 source with local host plugins. It does not establish public directory publication.
+Checked 2026-10-31. This patch adds the Claude marketplace description to the source generator and synchronizes package versions. Handoff behavior and schema are unchanged.
 
-## Implemented
+## Patch verification
 
-Six bounded, stateless stdio MCP tools for validate, export, import, compare, continue and redact. Tools process explicitly supplied inline text and have no file, network, command-execution or persistent-storage operations. Codex, Claude Code and Cursor packages share identical runtime bytes and a guided skill; built-in manual exports and schema 1.0 remain unchanged. Deterministic standalone archives and generated local marketplace catalogs are build outputs, not store listings.
+- 43 unit/integration/CLI/package test methods passed on macOS Python 3.14.7, including a regression for the generated Claude marketplace description and host manifest/archive version consistency.
+- Claude Code 2.1.220 strict native validation passed for the generated plugin and marketplace. This fixes the missing-description warning found in v0.4.0.
+- Deterministic source/plugin rebuilds, generated marketplace parity, syntax/whitespace checks and compileall passed. No external vulnerability-audit or static type-check claim.
+- Codex CLI 0.165.0 and Claude Code 2.1.220 installed/listed v0.4.0 in disposable configuration directories. Claude inventory found the skill and MCP server; direct cached-runtime protocol discovery and synthetic validation passed. Test installations were removed. This is historical v0.4.0 evidence, not a v0.4.1 desktop/model workflow claim.
 
-## Checks executed
+## Published baseline
 
-- 42 unit/integration/CLI/package test methods on Linux Python 3.12.14 and 3.13.5.
-- Independent 1,000 injected-text roundtrips and 3,000 malformed-call rejections; strict UTF-8 regression and redacted errors verified.
-- Official Python MCP SDK 1.29.0 verified initialize, six-tool discovery and three-provider roundtrips, including all extracted host packages. Official SDK 2.3.0 independently verified discovery and three-provider roundtrips.
-- Codex CLI 0.166.0-alpha.1 added the generated marketplace, installed and listed v0.4.0 in an isolated temporary CODEX_HOME. No account authentication, model invocation or user configuration changes.
-- Codex portable manifest/MCP configuration validated against official Agent Plugins 1.0 schemas. Deterministic archive bytes, exact runtime parity, safe members and package Markdown links tested.
-- compileall and syntax/whitespace policy checks; no static type-check claim. Zero third-party runtime dependencies. No external vulnerability-audit claim.
-- Independent review found two minor issues (non-UTF8 JSON acceptance and package-root README links); both fixed and retested.
+v0.4.0 source commit `a254a6f380f26d975b0c15fb068f6e2abe32a067` is public at https://github.com/Huzaifa-Asif/cross-agent-handoff. All six exact-commit CI jobs passed on Ubuntu/macOS with Python 3.11, 3.12 and 3.13: https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/runs/41227918671. The v0.4.0 tag and assets remain unchanged. Consult the v0.4.1 release and its exact-commit Actions run for patch publication evidence; this source checkpoint does not pre-claim future CI.
 
-## Not verified
+## Earlier checks
 
-Current macOS/Python 3.11 execution; Windows unsupported by the manual CLI safe-I/O contract. Claude Code native manifest validator, Cursor native installation and all desktop UI/model workflows remain unrun. Remote exact-commit CI, public repository availability, official directory eligibility/submission/review/listing are not established by local tests. Host data handling and model obedience are outside the local server's guarantees.
+The v0.4.0 checkpoint records Linux Python 3.12/3.13 tests, independent malformed-input and round-trip probes, official MCP SDK protocol checks, portable schema checks and isolated Codex CLI 0.166.0-alpha.1 package installation.
 
-## Distribution and next steps
+## Remaining gaps
 
-Build source and plugins with the documented scripts. Verify the actual published Git commit before using a repository URL, and publish the generated marketplace tree on a distinct distribution branch for direct host installation. The source tree itself is build input. See docs/platform-plugins.md for official dated references and separate publication gates. Never expose private handoff content to a provider merely to test installation.
+Cursor 3.20.21 is installed, but native plugin loading is untested. All desktop clean-install and model-driven workflows remain unrun. Windows is unsupported by the manual CLI safe-I/O contract. No official directory submission, eligibility, review or listing is established. Claude and Cursor submission portals require sign-in; OpenAI desktop-only submissions require approved-partner eligibility, organization allowlisting and identity verification. Host data handling and model obedience are outside the local server's guarantees.
+
+## Distribution
+
+Build source and plugins with the documented scripts. Use the generated marketplace on the separate distribution branch for host installation; the main branch is source build input. See docs/platform-plugins.md for installation and separate directory publication requirements. Use synthetic fixtures for validation.

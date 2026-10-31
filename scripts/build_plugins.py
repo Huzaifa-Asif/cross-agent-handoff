@@ -10,7 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 HOSTS = ('codex', 'claude', 'cursor')
-VERSION = '0.4.0'
+VERSION = '0.4.1'
 COMMON = ('handoff.py', 'handoff_mcp.py', 'LICENSE', 'SECURITY.md',
           'examples/example.json', 'docs/schema-v1.json', 'docs/platform-plugins.md',
           'docs/privacy.md')
@@ -76,6 +76,7 @@ def build(output):
                 'category': 'Productivity'}]},
         '.claude-plugin/marketplace.json': {
             'name': 'huzaifa-cross-agent-handoff', 'owner': {'name': 'Huzaifa Asif'},
+            'metadata': {'description': 'Local tools and skills for reviewable work-context handoffs between coding assistants.'},
             'plugins': [{'name': 'cross-agent-handoff', 'source': './plugins/claude'}]},
         '.cursor-plugin/marketplace.json': {
             'name': 'huzaifa-cross-agent-handoff', 'owner': {'name': 'Huzaifa Asif'},
@@ -91,7 +92,7 @@ def build(output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', default=str(ROOT / 'dist' / 'plugins-0.4.0'))
+    parser.add_argument('--output', default=str(ROOT / 'dist' / f'plugins-{VERSION}'))
     args = parser.parse_args()
     print(json.dumps(build(args.output), indent=2))
 
