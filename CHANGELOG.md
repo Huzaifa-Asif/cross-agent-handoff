@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-10-31
+
+- Add bounded stateless stdio MCP validate/export/import/compare/continue/redact tools operating only on explicitly supplied text.
+- Add Codex, Claude Code and Cursor plugin manifests, guided skill, deterministic standalone bundles and local marketplace catalogs.
+- Add protocol, privacy, invalid-input, package parity and complete handoff journey tests.
+- Preserve schema 1.0 and all five manual export formats. No vendor API connection, native session migration or directory publication implied.
+
+
 ## 0.3.0 — local candidate, 2026-10-31
 
 - Added explicit generic manual destination labels through `export --custom-target`, without executable plugins or provider connections.

@@ -2,7 +2,11 @@
 
 A small, local-first tool for transferring **reviewable work context**, not hidden agent memory, between Codex, Claude, Cursor, Gemini and Grok.
 
-A good handoff says what you were trying to do, why choices were made, which exact revision you inspected, what actually passed, what is missing, and what to do next. This tool keeps those details in a versioned JSON bundle and a losslessly round-trippable Markdown document. Provider adapters are **manual document adapters**, not live integrations or native session migration.
+A good handoff says what you were trying to do, why choices were made, which exact revision you inspected, what actually passed, what is missing, and what to do next. This tool keeps those details in a versioned JSON bundle and a losslessly round-trippable Markdown document. Provider document adapters are **manual document adapters**, not native session migration. Optional Codex, Claude Code and Cursor plugins expose local MCP tools for these operations; they do not connect to vendor APIs or transfer hidden memory.
+
+## Local host plugins
+
+Version 0.4.0 adds six stateless stdio MCP tools and host-specific Codex, Claude Code and Cursor plugin bundles. See [installation and publication status](docs/platform-plugins.md) and [privacy](docs/privacy.md). Build locally with `python3 scripts/build_plugins.py --output dist/plugins-0.4.0`. No official directory listing or native host UI verification is claimed.
 
 ## Quick start
 

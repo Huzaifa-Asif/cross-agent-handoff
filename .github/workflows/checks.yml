@@ -15,6 +15,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m unittest discover -s tests -v
-      - run: python -m compileall -q handoff.py tests
+      - run: python -m compileall -q handoff.py handoff_mcp.py tests
       - run: python scripts/check_source.py
       - run: python scripts/build_source.py
+      - run: python scripts/build_plugins.py --output dist/plugins-ci

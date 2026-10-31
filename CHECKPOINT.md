@@ -1,33 +1,25 @@
-# Cross-Agent Handoff checkpoint — 2026-10-31
+# Cross-Agent Handoff 0.4.0 verification checkpoint
 
-## Source and verification state
+Checked 2026-10-31. This snapshot extends the public-safe 0.3.0 source with local host plugins. It does not establish public directory publication.
 
-Version 0.3.0 source snapshot. Neutral wire schema 1.0 is unchanged. The scope is cross-agent context transfer and adapter fidelity. Artifact/CI evidence verification is a separate concern. There is no npm package or hosted service.
+## Implemented
 
-Implemented: explicit `export --custom-target LABEL` generic manual v2 envelope; strict bounded ASCII labels and fixed safety guidance; v1/v2 import; direct-string UTF-8 byte-limit and invalid-Unicode checks. Five built-in v1 provider exports remain frozen and byte-compatible. A label is unverified presentation metadata, not provider support or identity, and is not included in the bundle digest or returned by import. Old releases cannot import v2.
+Six bounded, stateless stdio MCP tools for validate, export, import, compare, continue and redact. Tools process explicitly supplied inline text and have no file, network, command-execution or persistent-storage operations. Codex, Claude Code and Cursor packages share identical runtime bytes and a guided skill; built-in manual exports and schema 1.0 remain unchanged. Deterministic standalone archives and generated local marketplace catalogs are build outputs, not store listings.
 
-Implementation and tests match the independently reviewed local v0.3.0 candidate. Public-source preparation only changes documentation and omits unpublished launch-design drafts; it does not change runtime code or tests.
+## Checks executed
 
-## Verification actually executed
+- 42 unit/integration/CLI/package test methods on Linux Python 3.12.14 and 3.13.5.
+- Independent 1,000 injected-text roundtrips and 3,000 malformed-call rejections; strict UTF-8 regression and redacted errors verified.
+- Official Python MCP SDK 1.29.0 verified initialize, six-tool discovery and three-provider roundtrips, including all extracted host packages. Official SDK 2.3.0 independently verified discovery and three-provider roundtrips.
+- Codex CLI 0.166.0-alpha.1 added the generated marketplace, installed and listed v0.4.0 in an isolated temporary CODEX_HOME. No account authentication, model invocation or user configuration changes.
+- Codex portable manifest/MCP configuration validated against official Agent Plugins 1.0 schemas. Deterministic archive bytes, exact runtime parity, safe members and package Markdown links tested.
+- compileall and syntax/whitespace policy checks; no static type-check claim. Zero third-party runtime dependencies. No external vulnerability-audit claim.
+- Independent review found two minor issues (non-UTF8 JSON acceptance and package-root README links); both fixed and retested.
 
-- Linux Python 3.12.14 and 3.13.5: all 29 unit/integration/CLI methods passed, including frozen v1 hashes, custom labels, canonical corruption, continuation/redaction and safe-output journeys.
-- Included review probes: 500 deterministic adversarial round trips per runtime.
-- Independent reviewer: 1,000 custom/built-in round trips and 3,000 malformed-envelope rejections per runtime; prior-commit v1 mutual compatibility; byte/type/lineage/symlink/instruction-path probes. No implementation blocker. Clarified API wording that only noncanonical header edits are rejected; a valid changed target label is not authenticated.
-- Python compileall, syntax/whitespace checks, git diff whitespace check, Draft 2020-12 schema meta-validation and synthetic example validation passed.
-- Source archive build/extracted-source verification and exact commit are recorded in the run report after final packaging.
-- No static type checker installed/run. Syntax checks are not typing. Zero third-party runtime dependencies; no external vulnerability-audit claim.
-- Current revision not run on Windows (unsupported), macOS or Python 3.11. Remote CI is authored but unrun because nothing was pushed. No provider UI/API integration test.
+## Not verified
 
-## Safety and provider research
+Current macOS/Python 3.11 execution; Windows unsupported by the manual CLI safe-I/O contract. Claude Code native manifest validator, Cursor native installation and all desktop UI/model workflows remain unrun. Remote exact-commit CI, public repository availability, official directory eligibility/submission/review/listing are not established by local tests. Host data handling and model obedience are outside the local server's guarantees.
 
-Five official provider documentation surfaces rechecked October 31; details in docs/providers.md. All built-ins and custom labels are manual document surfaces. No private histories, account sessions, credentials, employer code or customer context accessed. Synthetic fixtures only. Inputs never grant authority; imported instructions are inert. No network calls, archive import, Git capture, referenced-file following, plugin/template execution, or native session migration.
+## Distribution and next steps
 
-Redaction remains explicit selected-field removal with omissions, not a comprehensive secret detector. Originals remain. Expiration is informational; purge is an explicit named-file deletion, not secure erasure. Digests prove payload equality/lineage, not artifact correctness or author/destination identity.
-
-## Remaining verification
-
-- Verify the published commit and its CI results before relying on hosted checks. A workflow definition is not evidence of a successful run.
-- Extend runtime coverage when a suitable environment is available; historical macOS results do not validate this revision.
-- Expand provider-specific integration only with current official evidence and permission. Generic labels alone do not establish support.
-
-See the repository's commit history and Actions page for subsequent publication and CI evidence. This checkpoint records local verification, not a claim that a receiving assistant executed or trusted a handoff.
+Build source and plugins with the documented scripts. Verify the actual published Git commit before using a repository URL, and publish the generated marketplace tree on a distinct distribution branch for direct host installation. The source tree itself is build input. See docs/platform-plugins.md for official dated references and separate publication gates. Never expose private handoff content to a provider merely to test installation.
