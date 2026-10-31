@@ -1,0 +1,12 @@
+{
+  "name": "huzaifa-cross-agent-handoff",
+  "owner": {
+    "name": "Huzaifa Asif"
+  },
+  "plugins": [
+    {
+      "name": "cross-agent-handoff",
+      "source": "./plugins/cursor"
+    }
+  ]
+}

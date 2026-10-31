@@ -1,0 +1,15 @@
+{
+  "name": "cross-agent-handoff",
+  "version": "0.4.0",
+  "description": "Prepare, validate and continue explicit portable work handoffs locally.",
+  "author": {
+    "name": "Huzaifa Asif"
+  },
+  "repository": "https://github.com/Huzaifa-Asif/cross-agent-handoff",
+  "license": "MIT",
+  "keywords": [
+    "handoff",
+    "context-transfer",
+    "local-first"
+  ]
+}

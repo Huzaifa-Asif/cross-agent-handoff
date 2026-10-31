@@ -1,0 +1,21 @@
+{
+  "name": "cross-agent-handoff",
+  "version": "0.4.0",
+  "description": "Prepare, validate and continue explicit portable work handoffs locally.",
+  "author": {
+    "name": "Huzaifa Asif"
+  },
+  "repository": "https://github.com/Huzaifa-Asif/cross-agent-handoff",
+  "license": "MIT",
+  "keywords": [
+    "handoff",
+    "context-transfer",
+    "local-first"
+  ],
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true
+    }
+  }
+}

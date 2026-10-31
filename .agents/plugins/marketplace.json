@@ -1,0 +1,17 @@
+{
+  "name": "huzaifa-cross-agent-handoff",
+  "plugins": [
+    {
+      "name": "cross-agent-handoff",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
