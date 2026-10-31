@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "id": "demo",
+  "revision": 1,
+  "created_at": "2026-10-29T12:00:00Z",
+  "expires_at": null,
+  "source": {
+    "provider": "codex",
+    "actor": "developer"
+  },
+  "repository": {
+    "url": null,
+    "branch": "main",
+    "commit": null,
+    "dirty": false
+  },
+  "files": [
+    {
+      "path": "src/main.py",
+      "description": "Entry point"
+    }
+  ],
+  "tests": [
+    {
+      "command": "python -m unittest discover -s tests",
+      "status": "unrun",
+      "detail": "Not run"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "report.txt",
+      "sha256": null
+    }
+  ],
+  "omissions": [],
+  "goal": [
+    {
+      "text": "Continue the task; verify prior claims.",
+      "status": "inferred"
+    }
+  ],
+  "scope": [],
+  "constraints": [],
+  "decisions": [],
+  "rejected_alternatives": [],
+  "risks": [],
+  "blockers": [],
+  "next_steps": [],
+  "dirty_changes": []
+}
