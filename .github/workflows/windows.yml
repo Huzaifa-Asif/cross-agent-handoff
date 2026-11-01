@@ -25,6 +25,8 @@ jobs:
       - run: python -m unittest discover -s tests -p test_windows_journeys.py -v
       - run: python -m unittest discover -s tests -p test_store_retry.py -v
       - run: python -m unittest discover -s tests -p test_zip_preflight.py -v
+      - run: python -m unittest discover -s tests -p test_normalized_budget.py -v
+      - run: python -m unittest discover -s tests -p test_redaction_retention.py -v
       - run: python -m compileall -q handoff.py migration.py windows_io.py
   packaged-desktop:
     runs-on: windows-latest

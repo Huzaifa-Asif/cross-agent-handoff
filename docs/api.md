@@ -13,7 +13,7 @@
 - `continue_bundle(current, edited, base_digest) -> dict`: bind reviewed edits to the exact base digest, preserve identity, reject changed lineage/no-op/older time, then increment revision. Never merges or executes content.
 - `redact(bundle, pointers) -> dict`: deep copy, replace supported text/source fields with `[REDACTED]` and selected repository metadata with null, append omissions, increment revision and link original digest. Unselected source timestamp/provenance remain authored metadata; caller must update provenance when appropriate. Original remains untouched.
 - `expiration(bundle, now=None) -> str`: `active`, `expired`, or `no-expiration`. Optional `now` must be timezone-aware. No background retention worker.
-- `read_file(path) -> bytes`, `write_file(path, data)`, `purge_file(path)`: POSIX no-follow operations. Writers exclusively create private-mode files. The CLI uses these routines; callers must not replace them with unsafe loaders when handling untrusted selections.
+- `read_file(path) -> bytes`, `write_file(path, data)`, `purge_file(path)`: On macOS/Linux, POSIX no-follow operations; the unreleased Windows candidate uses checked local NTFS handles and rejects unsupported paths/reparse points. Writers exclusively create files with the platform’s checked access controls. The CLI uses these routines; callers must not replace them with unsafe loaders when handling untrusted selections.
 
 ## Versioning
 
@@ -23,6 +23,6 @@ All evidence collections have at most 256 records; text at most 32,768 Unicode c
 
 ## Migration engine
 
-`migration.py` is a separate POSIX local-filesystem API and CLI, never overloaded into the inline task MCP tools. Its primary functions are `plan`, bounded `run`, automatic `auto_run`, `review`, `show`, `search`, `redact`, `export`, `verify_export` and `purge`. Mutating run/redact/export calls require an exact reviewed checkpoint digest; migration/source/record digests are integrity checks, not authentication.
+`migration.py` is a separate local-filesystem API and CLI (macOS/Linux, plus the unreleased Windows NTFS candidate), never overloaded into the inline task MCP tools. Its primary functions are `plan`, bounded `run`, automatic `auto_run`, `review`, `show`, `search`, `redact`, `export`, `verify_export` and `purge`. Mutating run/redact/export calls require an exact reviewed checkpoint digest; migration/source/record digests are integrity checks, not authentication. Full Migration expiry blocks run, redaction and export; read-only review/show/search and explicit purge remain available. Redaction checks expiry before and after integrity verification, and immediately before publishing its revision.
 
 See [migration format, parsing coverage and bounds](migration.md). CLI stdout is the final JSON result; migration progress is bounded NDJSON on stderr. Graceful pause returns exit 130 and a checkpoint. Exit 2 means a checked input, stale-state, integrity, bounds or local-filesystem failure. A partial plan/export directory can remain after interruption; success is not claimed until the command finishes. Raw originals and old normalized revisions remain local until explicit purge.

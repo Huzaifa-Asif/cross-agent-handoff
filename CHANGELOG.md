@@ -2,6 +2,10 @@
 
 ## Unreleased maintenance
 
+- Add an unreleased Windows x64 desktop candidate with checked local NTFS operations and native Windows CI; signing and consumer installation remain unverified.
+- Add a guided field-redaction picker with bounded text previews and explicit application. Earlier record revisions, original exports and previously saved portable copies remain unchanged.
+- Check normalized structure and redaction size before saving a record, so limit failures remain reviewable omissions or unchanged revisions. Enforce configured retention deadlines before redaction publication.
+- Skip unsupported UNC, device and root-relative Python discovery entries before filesystem probes. Keep Task Hand Off and Full Migration labels, beginner setup guidance and pause/recovery behavior explicit.
 - Surface record-level migration findings in CLI progress and desktop completion, including reopened 1.0 libraries. Distinguish source-only field/layout omissions from absent source values, explicit redactions and reference notices; retain known record totals without a false 100% fidelity claim.
 - Deliver notice-only terminal progress before throttling, and preserve finished-state presentation after a prior pause. Checkpoint, record and portable-library schemas remain unchanged.
 

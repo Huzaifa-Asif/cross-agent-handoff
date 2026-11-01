@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const api = window.handoff;
-const state = {task: null, source: null, workspace: null, library: null, record: null, output: null, busy: false, offset: 0, progress: null, paused: false, activeMigration: null, formatTouched: false};
+const state = {task: null, source: null, workspace: null, library: null, record: null, output: null, busy: false, offset: 0, progress: null, paused: false, activeMigration: null, formatTouched: false, recordData: null, redactPage: 0, redactChoices: new Map(), redactPointer: null};
 const priorDisabled = new Map();
 function recovery(message) {$('recovery-help').textContent = message;}
 function formatGuidance() {
@@ -58,7 +58,7 @@ function invalidateExport() {
   state.output = null; $('export-location').textContent = ''; $('verify-export').hidden = true; $('confirm-reviewed').checked = false; $('include-original').checked = false;
 }
 function invalidateLibraryViews() {
-  invalidateExport(); state.record = null; $('record-review').hidden = true; $('record-content').textContent = ''; $('record-name').textContent = '';
+  invalidateExport(); resetRedaction(); state.record = null; $('record-review').hidden = true; $('record-content').textContent = ''; $('record-name').textContent = '';
   $('search-results').replaceChildren(); $('search-results').hidden = true; $('clear-search').hidden = true; $('library-query').value = '';
 }
 function pendingReview() {
@@ -70,12 +70,64 @@ function pendingReview() {
   $('omissions').textContent = 'File omissions and field findings await verification. Resume or Refresh review explicitly to verify them.';
   $('previous-records').disabled = true; $('next-records').disabled = true;
 }
+// Guided labels are text only: at most 23 options x 256 UTF-8 bytes plus
+// a 768-byte selected-field summary, below the 8 KiB guided-preview budget.
+function clippedText(value, maxBytes=256, maxCharacters=120) {
+  const text = typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : 'structured value (entire field)';
+  let result='', bytes=0, units=0, characters=0;
+  for (const character of text) {
+    const code=character.codePointAt(0), size=code<=0x7f?1:code<=0x7ff?2:code<=0xffff?3:4;
+    if (characters>=maxCharacters || bytes+size>maxBytes-3) break;
+    result+=character; bytes+=size; units+=character.length; characters++;
+  }
+  if (units<text.length && bytes+3<=maxBytes) {result+='…';bytes+=3;}
+  return {text:result,bytes};
+}
+function clearRedactionSelection() {
+  state.redactPointer=null; $('redact-choice').value=''; $('redact-pointer').value='';
+  $('redact-selection').textContent='No field selected. Choose one field, review it, then apply redaction.';
+}
+function resetRedaction() {
+  state.recordData=null; state.redactPage=0; state.redactChoices=new Map();
+  clearRedactionSelection(); $('redact-choice').replaceChildren();
+  $('redact-page').textContent=''; $('redact-previous').disabled=true; $('redact-next').disabled=true; $('redact-record').disabled=true;
+}
+function renderRedaction() {
+  clearRedactionSelection(); state.redactChoices=new Map();
+  const select=$('redact-choice'); select.replaceChildren();
+  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Choose a field to redact…';select.append(placeholder);
+  const data=state.recordData;
+  if (!data) return;
+  const usable=value=>value!==undefined && value!==null && value!=='' && value!=='[REDACTED]';
+  function add(pointer,label) {
+    const preview=clippedText(label,256,180).text;
+    const option=document.createElement('option');option.value=pointer;option.textContent=preview;select.append(option);state.redactChoices.set(pointer,preview);
+  }
+  for (const [field,label] of [['title','Title'],['context','Entire context field'],['preferences','Entire preferences field']]) {
+    if (usable(data[field])) add('/'+field,label+' — '+clippedText(data[field],192).text);
+  }
+  const messages=Array.isArray(data.messages)?data.messages:[],count=Math.min(messages.length,50000);
+  state.redactPage=Math.min(state.redactPage,Math.max(0,Math.floor((count-1)/20)));
+  const start=state.redactPage*20,end=Math.min(start+20,count);let available=0;
+  for (let index=start;index<end;index++) {
+    const message=messages[index];if (!message || typeof message!=='object' || !usable(message.text)) continue;
+    add('/messages/'+index+'/text','Message '+(index+1)+' text ('+clippedText(message.role || 'unknown role',64,24).text+') — '+clippedText(message.text,192).text);available++;
+  }
+  $('redact-page').textContent=count?`Messages ${start+1}–${end} of ${count} · ${available} text fields on this page${messages.length>count?' · only the first 50,000 messages shown':''}`:'No message text fields. Choose an available title, context or preferences field.';
+  $('redact-previous').disabled=state.redactPage===0; $('redact-next').disabled=end>=count;
+}
+function redactionAllowed() {
+  return Boolean(state.record && state.recordData && state.redactPointer && state.redactPointer===$('redact-pointer').value && !state.busy && !state.library?.expired && !(state.library?.expires_at && Date.parse(state.library.expires_at)<=Date.now()) && !state.library?.verification_pending && !state.progress?.verification_pending);
+}
 function disableCurrentControls() {
   document.querySelectorAll('button,input,select,textarea').forEach(element => {
     if (element.id !== 'cancel-operation') {if (!priorDisabled.has(element)) priorDisabled.set(element, element.disabled); element.disabled = true;}
   });
 }
 function update() {
+  $('redact-record').disabled=!redactionAllowed();
+  $('redact-previous').disabled=!state.recordData || state.redactPage===0;
+  $('redact-next').disabled=!state.recordData || (state.redactPage+1)*20>=Math.min(Array.isArray(state.recordData.messages)?state.recordData.messages.length:0,50000);
   $('export-task').disabled = !state.task;
   const library = state.library;
   if (!library) return;
@@ -148,20 +200,22 @@ async function review() {
     const small = document.createElement('small'); small.textContent = `${item.kind} · ${item.messages} messages · ${item.omissions_total ?? item.omissions.length} review findings`;
     button.append(label, small); button.addEventListener('click', () => selectRecord(item.file, button)); listItem.append(button); container.append(listItem);
   }
-  if (!result.records.length) {const p = document.createElement('p'); p.className = 'muted'; p.textContent = result.expired ? 'This library has expired. No conversation records are available on this page. Review remains available, but processing and export are blocked.' : !result.complete && result.processed_units === 0 && result.normalized_records === 0 ? 'Processing has not started. Start or resume full migration to read the selected export; the local snapshot is already preserved.' : !result.complete ? 'No conversation records have been created yet. Resume processing, then review any preserved-only files and omissions.' : 'No conversation records were parsed. Review the preserved-only files and omissions; your original snapshot is still local.'; container.append(p);}
+  if (!result.records.length) {const p = document.createElement('p'); p.className = 'muted'; p.textContent = result.expired ? 'This library has expired. No conversation records are available on this page. Review remains available, but processing, redaction and export are blocked.' : !result.complete && result.processed_units === 0 && result.normalized_records === 0 ? 'Processing has not started. Start or resume full migration to read the selected export; the local snapshot is already preserved.' : !result.complete ? 'No conversation records have been created yet. Resume processing, then review any preserved-only files and omissions.' : 'No conversation records were parsed. Review the preserved-only files and omissions; your original snapshot is still local.'; container.append(p);}
   $('record-page').textContent = result.normalized_records ? `${state.offset + 1}–${state.offset + result.records.length} of ${result.normalized_records} records` : '0 records';
   $('omissions').textContent = result.omissions.length ? JSON.stringify(result.omissions, null, 2) + (result.omissions_truncated ? `\n[Showing 100 of ${result.omissions_total} file omissions. Inspect checkpoint.json locally for the full list.]` : '') : 'No export files were skipped. Check each record for field-level omissions and missing source data.';
-  if (result.expired) {recovery('This library has expired. You can review it, but further processing and export are blocked. Original files are not automatically deleted.'); status('This library has expired. Review remains available, but processing and export are blocked. Originals are not automatically deleted.', true);}
+  if (result.expired) {recovery('This library has expired. You can review it, but further processing, redaction and export are blocked. Original files are not automatically deleted.'); status('This library has expired. Review remains available, but processing, redaction and export are blocked. Originals are not automatically deleted.', true);}
   update();
   return result;
 }
 function selectRecord(file, button) {
   return perform('Opening verified local reference data…', async () => {
+    resetRedaction();
     const result = await api.run('migration-show', {workspace: state.workspace.handle, record: file});
-    state.record = file;
+    state.record = file; state.recordData=result; renderRedaction();
     $('record-name').textContent = file;
-    let preview = JSON.stringify(result, null, 2);
-    if (preview.length > 262144) preview = preview.slice(0, 262144) + '\n\n[Display limit reached. Use the CLI to review the full record before sharing. The file itself is not truncated.]';
+    const rawPreview = JSON.stringify(result, null, 2);
+    const boundedPreview = clippedText(rawPreview,262144,262144).text;
+    const preview = boundedPreview === rawPreview ? rawPreview : boundedPreview + '\n\n[Display limit reached. Use the CLI to review the full record before sharing. The file itself is not truncated.]';
     $('record-content').textContent = preview;
     $('record-review').hidden = false;
     document.querySelectorAll('.record-item').forEach(item => item.classList.toggle('selected', item === button));
@@ -236,12 +290,34 @@ $('process-batch').addEventListener('click', () => perform('Checking the local l
   status(state.paused ? 'Paused safely at the saved checkpoint. Resume full migration now or reopen this library later.' : state.library.complete ? omitted ? 'Finished with omissions. Review preserved-only data and all record omissions before sharing.' : notices ? 'Processing finished with source-data notices or intentional changes. Review the separate finding counts before sharing.' : 'Processing complete for the selected export. Review all records and omissions before sharing.' : 'Processing stopped before completion. Review the saved checkpoint before resuming.');
 }));
 $('refresh-review').addEventListener('click', () => perform('Verifying snapshot, checkpoint and record hashes…', async () => {await review(); state.progress = null; if (!state.library.expired) {recovery(state.library.complete ? 'Saved records and findings are verified. Review their content before saving portable files.' : 'Saved records and findings are verified. Choose Resume full migration to continue processing from the checkpoint.'); status('Local integrity checks passed. Review content and omissions; hashes do not establish author identity.');}}));
-$('redact-record').addEventListener('click', () => perform('Creating a redacted record revision…', async () => {
-  if (!state.record) throw new Error('Select a record first.');
-  state.library = await api.run('migration-redact', {workspace: state.workspace.handle, checkpoint: state.library.checkpoint, record: state.record, pointer: $('redact-pointer').value});
+$('redact-choice').addEventListener('change', () => {
+  if (state.busy) return;
+  const pointer=$('redact-choice').value;
+  if (!state.redactChoices.has(pointer)) {clearRedactionSelection();update();return;}
+  state.redactPointer=pointer; $('redact-pointer').value=pointer;
+  $('redact-selection').textContent=clippedText('Selected field: '+state.redactChoices.get(pointer)+'. Applying replaces this whole selected field with [REDACTED].',768,384).text;
+  update();
+});
+$('redact-pointer').addEventListener('input', () => {
+  if (state.busy) return;
+  $('redact-choice').value='';
+  state.redactPointer=$('redact-pointer').value.trim() ? $('redact-pointer').value : null;
+  $('redact-selection').textContent=state.redactPointer?clippedText('Advanced field path selected: '+state.redactPointer,768,240).text:'No field selected. Choose one field, review it, then apply redaction.';
+  update();
+});
+for (const [id,delta] of [['redact-previous',-1],['redact-next',1]]) $(id).addEventListener('click', () => {
+  if (state.busy || !state.recordData) return;
+  state.redactPage=Math.max(0,state.redactPage+delta);renderRedaction();update();
+});
+$('redact-record').addEventListener('click', () => {
+  if (!redactionAllowed()) {update();return;}
+  return perform('Creating a redacted record revision…', async () => {
+  if (!state.record || !state.redactPointer) throw new Error('Select a record and an explicit field first.');
+  state.library = await api.run('migration-redact', {workspace: state.workspace.handle, checkpoint: state.library.checkpoint, record: state.record, pointer: state.redactPointer});
   invalidateLibraryViews();
   await review(); status('Redacted copy saved with an omission record. The original export remains in this local library. Review the new record before sharing.');
-}));
+});
+});
 $('export-migration').addEventListener('click', () => perform('Choose a new folder for reviewed portable files…', async () => {
   if (!$('confirm-reviewed').checked) throw new Error('Review the records and omissions, then confirm before exporting.');
   const output = await api.choose('export-output'); if (!output) return status('Export cancelled.');

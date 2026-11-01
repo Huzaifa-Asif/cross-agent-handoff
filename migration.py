@@ -212,6 +212,24 @@ def json_bytes(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
 
 
+def validate_json_structure(value, max_nodes=MAX_NODES):
+    """Apply the same JSON reader budget before a normalized record is published."""
+    stack, nodes = [(value, 0)], 0
+    while stack:
+        item, depth = stack.pop()
+        nodes += 1
+        h.require(nodes <= max_nodes and depth <= MAX_DEPTH, 'JSON structure exceeds limits')
+        if isinstance(item, dict):
+            stack.extend((v, depth + 1) for v in item.values())
+            stack.extend((k, depth + 1) for k in item)
+        elif isinstance(item, list):
+            stack.extend((v, depth + 1) for v in item)
+        elif isinstance(item, str):
+            h.require(not any(0xD800 <= ord(c) <= 0xDFFF for c in item), 'invalid Unicode')
+        elif isinstance(item, float):
+            h.require(math.isfinite(item), 'nonfinite JSON value')
+
+
 def bounded_json(data, max_nodes=MAX_NODES):
     h.require(len(data) <= MAX_MEMBER, 'JSON unit exceeds 32 MiB; preserved in source snapshot')
     def pairs(items):
@@ -224,20 +242,7 @@ def bounded_json(data, max_nodes=MAX_NODES):
         raise h.HandoffError('nonfinite JSON value')
     try:
         value = json.loads(data.decode('utf-8'), object_pairs_hook=pairs, parse_constant=constant)
-        stack, nodes = [(value, 0)], 0
-        while stack:
-            item, depth = stack.pop()
-            nodes += 1
-            h.require(nodes <= max_nodes and depth <= MAX_DEPTH, 'JSON structure exceeds limits')
-            if isinstance(item, dict):
-                stack.extend((v, depth + 1) for v in item.values())
-                stack.extend((k, depth + 1) for k in item)
-            elif isinstance(item, list):
-                stack.extend((v, depth + 1) for v in item)
-            elif isinstance(item, str):
-                h.require(not any(0xD800 <= ord(c) <= 0xDFFF for c in item), 'invalid Unicode')
-            elif isinstance(item, float):
-                h.require(math.isfinite(item), 'nonfinite JSON value')
+        validate_json_structure(value, max_nodes)
         return value
     except (UnicodeError, json.JSONDecodeError, RecursionError) as exc:
         raise h.HandoffError('invalid bounded UTF-8 JSON') from exc
@@ -996,6 +1001,7 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
                                     if j < data['next_record']:
                                         continue
                                     h.require(len(data['records']) < MAX_RECORDS, 'migration exceeds 50000 records')
+                                    validate_json_structure(record)
                                     raw_record = json_bytes(record)
                                     h.require(len(raw_record) <= MAX_RECORD, 'normalized record exceeds 16 MiB')
                                     name = f'record-{i:05d}-{j:05d}.json'
@@ -1146,7 +1152,9 @@ def redact(workspace, base_digest, record_name, pointer):
         with store.lock():
             data, digest = store.checkpoint()
             h.require(digest == base_digest, 'stale checkpoint; review before redacting')
+            active(data)
             check_snapshot(store, data)
+            active(data)
             item = next((item for item in data['records'] if item['file'] == record_name), None)
             if item is None:
                 raise h.HandoffError('unknown record')
@@ -1163,10 +1171,15 @@ def redact(workspace, base_digest, record_name, pointer):
             h.require((type(target) is dict and leaf in target) or (type(target) is list and type(leaf) is int and leaf < len(target)), 'pointer does not exist')
             target[leaf] = '[REDACTED]'
             record['omissions'].append({'path': pointer, 'reason': 'Explicit user-selected redaction; original snapshot remains local'})
+            validate_json_structure(record)
             content = json_bytes(record)
+            h.require(len(content) <= MAX_RECORD, 'normalized record exceeds 16 MiB')
             # Revisioned filenames avoid making a prior checkpoint unreadable on a crash.
             new_name = f'redacted-{data["revision"]:08d}-{len(data["redactions"]):05d}.json'
             h.require(new_name not in {entry['file'] for entry in data['records']}, 'redaction revision filename conflicts')
+            # Once publication starts, finish tracking the revision even if its
+            # deadline passes during I/O; a post-write check would orphan it.
+            active(data)
             store.write(new_name, content)
             item.update(file=new_name, sha256=sha(content))
             data['redactions'].append({'record': new_name, 'pointer': pointer, 'previous': record_name})

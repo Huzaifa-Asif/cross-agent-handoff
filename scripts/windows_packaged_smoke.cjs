@@ -50,7 +50,7 @@ async function main() {
   const recordCount = 1250; // Exceeds the engine's default 1000-record batch.
   await fs.writeFile(source, JSON.stringify(Array.from({length:recordCount}, (_,i) => ({id:String(i),messages:[{role:'user',timestamp:'2026-01-01T00:00:00Z',text:`Plan 日本語 🚀 ${i}`}]}))));
   const task = path.join(evidence,'task.json'), reference = path.join(evidence,'task.md');
-  const workspace = path.join(evidence,'migration-library'), output = path.join(evidence,'portable');
+  const workspace = path.join(evidence,'migration-library'), output = path.join(evidence,'portable'), redactedOutput = path.join(evidence,'portable-redacted');
   const app = await _electron.launch({executablePath,timeout:60000,env:{...process.env,PYTHON_MANAGER_AUTOMATIC_INSTALL:'false'}});
   try {
     const page = await app.firstWindow();
@@ -111,9 +111,43 @@ async function main() {
     await choose(output); await page.locator('#export-migration').click(); await idle();
     await page.locator('#verify-export').click(); await idle();
     assert.match(await page.locator('#status-message').innerText(),/^2500 portable files verified/);
+    const checkpointBefore=await fs.readFile(path.join(workspace,'checkpoint.json'));
+    const oldState=JSON.parse(checkpointBefore).data;
+    const oldRecordName=oldState.records[0].file;
+    const oldPortableRecord=await fs.readFile(path.join(output,oldRecordName));
+    const oldRecord=JSON.parse(oldPortableRecord);
+    const originalSnapshot=await fs.readFile(path.join(workspace,'source.bin'));
+    await page.locator('#records button').first().click(); await idle();
+    await page.locator('#redact-choice').selectOption('/messages/0/text');
+    assert.deepEqual(await fs.readFile(path.join(workspace,'checkpoint.json')),checkpointBefore,
+      'Selecting a guided field must not mutate the library');
+    assert.match(await page.locator('#redact-warning').innerText(),/Existing portable exports are unchanged/);
+    await capture(page,evidence,'windows-redaction-selection');
+    await page.locator('#redact-record').click(); await idle();
+    assert.equal(await page.locator('#redaction-count').innerText(),'1');
+    assert.equal(await page.locator('#include-original').isDisabled(),true);
+    assert.equal(await page.locator('#redact-pointer').inputValue(),'');
+    assert.deepEqual(await fs.readFile(path.join(output,oldRecordName)),oldPortableRecord,
+      'Earlier portable exports must remain unchanged');
+    assert.deepEqual(await fs.readFile(path.join(workspace,oldRecordName)),oldPortableRecord,
+      'Earlier local record revision must remain unchanged');
+    assert.deepEqual(await fs.readFile(path.join(workspace,'source.bin')),originalSnapshot,
+      'Redaction must retain the original snapshot');
+    await page.locator('#confirm-reviewed').check();
+    await choose(redactedOutput); await page.locator('#export-migration').click(); await idle();
+    await page.locator('#verify-export').click(); await idle();
+    assert.match(await page.locator('#status-message').innerText(),/^2500 portable files verified/);
+    const newState=JSON.parse(await fs.readFile(path.join(workspace,'checkpoint.json'))).data;
+    const newRecord=JSON.parse(await fs.readFile(path.join(redactedOutput,newState.records[0].file)));
+    assert.equal(newRecord.messages[0].text,'[REDACTED]');
+    assert.deepEqual({...newRecord.messages[0],text:oldRecord.messages[0].text},oldRecord.messages[0]);
+    assert.equal(newRecord.id,oldRecord.id);
+    assert.equal(newRecord.omissions.length,oldRecord.omissions.length+1);
+    assert.deepEqual({...newRecord,messages:oldRecord.messages,omissions:oldRecord.omissions},oldRecord);
+    await assert.rejects(fs.access(path.join(redactedOutput,'original-export.bin')),{code:'ENOENT'});
     await capture(page,evidence,'windows-complete');
     const result = {platform:process.platform,executablePath,ready,records:recordCount,verifiedFiles:recordCount*2,packageFiles:await packageManifest(path.dirname(executablePath)),
-      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','reference export','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state'],
+      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','reference export','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state','explicit guided redaction','selection does not apply','old exports/revisions/snapshot unchanged','new redacted export verified','raw source excluded after redaction'],
       gaps:['OS file picker uses documented synthetic dialog stubs','no signing or installer/SmartScreen validation','screenshots require human inspection; CI save alone is not visual review']};
     await fs.writeFile(path.join(evidence,'validation.json'),JSON.stringify(result,null,2));
     console.log(JSON.stringify(result));

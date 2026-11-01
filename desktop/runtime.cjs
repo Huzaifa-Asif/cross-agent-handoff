@@ -15,7 +15,9 @@ function environment(platform=process.platform, source=process.env, temp) {
   return result;
 }
 function resolveWindowsCandidate(candidate,search,exists=fs.existsSync) {
-  const paths=search.split(';').filter(folder=>path.win32.isAbsolute(folder)).map(folder=>path.win32.join(folder,candidate+'.exe'));
+  // Readiness requires a drive-qualified interpreter. Skip unsupported UNC,
+  // device and root-relative entries before even probing their filesystem.
+  const paths=search.split(';').filter(folder=>/^[a-z]:[\\/]/i.test(folder) && path.win32.isAbsolute(folder)).map(folder=>path.win32.join(folder,candidate+'.exe'));
   return paths.find(file=>exists(file) && !(candidate.startsWith('python') && /[\\/]Microsoft[\\/]WindowsApps[\\/]/i.test(file)));
 }
 function installedCandidates(platform=process.platform) {

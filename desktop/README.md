@@ -22,7 +22,9 @@ The expandable **Setup & recovery help — on this computer** stays local and ex
 
 Your files stay local. Full Migration preserves the selected export and available parsed context; it cannot establish that the provider supplied your entire account state. Reference files do not recreate native history, settings or hidden memory. Gemini separately supports importing certain original provider archives; this generated portable library is not that format.
 
-Expiry blocks further processing/export but does not delete originals. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
+The current candidate offers a guided redaction picker for a title, an entire context/preferences field, or message text. It shows 20 messages per page with clipped text-only previews below 8 KiB in total. Selecting a field does not change data: review the selected field, then apply redaction. The advanced JSON pointer remains available in expandable details. The original export, previous record revisions and existing portable exports remain unchanged; review and save a new portable copy after redaction. This is not secure deletion or automatic secret detection.
+
+Expiry blocks further processing, redaction and export but does not delete originals. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
 
 ## Develop or build
 

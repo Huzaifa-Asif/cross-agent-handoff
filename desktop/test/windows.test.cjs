@@ -71,3 +71,14 @@ test('Windows native selections preserve components for backend reparse checks',
  assert.match(source,/process.platform === 'win32' \? path.resolve\(selected\) : fs.realpathSync.native\(selected\)/);
  assert.match(source,/else selected = process.platform === 'win32' \? path.resolve\(selected\)/);
 });
+
+test('Windows discovery never probes unsupported UNC, device or root-relative entries',()=>{
+ const unsupported=['\\\\synthetic-server\\share','\\\\?\\C:\\Python','\\\\.\\device','\\Python','C:relative','relative'];
+ const calls=[];
+ assert.equal(resolveWindowsCandidate('python',[...unsupported,'C:\\Python312'].join(';'),file=>{calls.push(file);return true;}),'C:\\Python312\\python.exe');
+ assert.deepEqual(calls,['C:\\Python312\\python.exe']);
+ calls.length=0;
+ assert.equal(resolveWindowsCandidate('py',unsupported.join(';'),file=>{calls.push(file);return true;}),undefined);
+ assert.deepEqual(calls,[]);
+ assert.equal(resolveWindowsCandidate('python','c:/Python312',()=>true),'c:\\Python312\\python.exe');
+});
