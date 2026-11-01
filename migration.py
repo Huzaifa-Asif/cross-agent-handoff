@@ -5,6 +5,7 @@ import argparse
 import copy
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
+import errno
 import hashlib
 import io
 import json
@@ -105,7 +106,7 @@ class ZipMetadataView:
             raise ValueError('invalid ZIP seek origin')
         position = offset + (self.position if whence == 1 else self.size if whence == 2 else 0)
         if position < 0:
-            raise ValueError('negative ZIP seek')
+            raise OSError(errno.EINVAL, 'negative ZIP seek')
         self.position = position
         return position
 

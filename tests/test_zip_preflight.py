@@ -1,5 +1,6 @@
 """Synthetic ZIP metadata budgets and cancellation; no provider/private fixtures."""
 import hashlib
+import errno
 import io
 import json
 from pathlib import Path
@@ -230,6 +231,19 @@ class ZipPreflightTests(unittest.TestCase):
         self.assertEqual(view.read(), b'')
         view.seek(-10, 2)
         self.assertEqual(view.read(), raw[-10:])
+
+    def test_empty_zip_negative_seek_matches_os_file_contract(self):
+        raw = archive_bytes(0)
+        self.assertEqual(len(raw), 22)
+        view = m._zip_view(io.BytesIO(raw))
+        for offset, whence in ((-1, 0), (-1, 1), (-42, 2)):
+            with self.subTest(offset=offset, whence=whence):
+                with self.assertRaises(OSError) as caught:
+                    view.seek(offset, whence)
+                self.assertEqual(caught.exception.errno, errno.EINVAL)
+                self.assertEqual(view.tell(), 0)
+        with zipfile.ZipFile(view) as archive:
+            self.assertEqual(archive.infolist(), [])
 
     def test_pause_during_hashing_leaves_source_and_no_workspace(self):
         self.source.write_bytes(b'A' * (2 * 1024 * 1024))
