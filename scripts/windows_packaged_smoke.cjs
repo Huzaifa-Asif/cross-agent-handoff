@@ -125,6 +125,8 @@ async function main() {
     await capture(page,evidence,'windows-redaction-selection');
     await page.locator('#redact-record').click(); await idle();
     assert.equal(await page.locator('#redaction-count').innerText(),'1');
+    assert.match(await page.locator('#migration-phase').innerText(),/1 intentional redactions/);
+    assert.doesNotMatch(await page.locator('#migration-phase').innerText(),/100\.0%/);
     assert.equal(await page.locator('#include-original').isDisabled(),true);
     assert.equal(await page.locator('#redact-pointer').inputValue(),'');
     assert.deepEqual(await fs.readFile(path.join(output,oldRecordName)),oldPortableRecord,
