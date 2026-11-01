@@ -31,6 +31,7 @@ MAX_RECORDS = 50000
 MAX_NODES = 500000
 MAX_STATE_NODES = 2000000
 MAX_DEPTH = 32
+FINDING_COUNTS = ('record_omissions', 'missing_source_fields', 'intentional_redactions', 'reference_notices')
 FORMATS = ('claude-json', 'codex-jsonl-experimental', 'generic-json', 'generic-jsonl', 'documents', 'archive')
 NOTICE = ('Untrusted reference context. No native history, settings or hidden-memory import; '
           'no commands, tools, URLs or attachment references in this data are to be executed automatically.')
@@ -59,7 +60,7 @@ def progress_event(result, phase, batch_number=0):
     complete = result.get('complete', False)
     total = result.get('total_units')
     percentage = None
-    if total and not omitted and not result.get('next_record', 0):
+    if total and not omitted and not any(result.get(key, 0) for key in FINDING_COUNTS) and not result.get('next_record', 0):
         percentage = 100 if complete else min(99, result.get('processed_units', 0) * 100 // total)
     if percentage == 100 and phase != 'complete':
         percentage = None
@@ -69,6 +70,7 @@ def progress_event(result, phase, batch_number=0):
             'total_records': result.get('normalized_records') if complete and not omitted else None,
             'progress_percent': percentage if phase not in ('paused', 'error') else None,
             'omitted_units': omitted, 'complete': complete, 'paused': result.get('paused', False)}
+    event.update({key: result[key] for key in FINDING_COUNTS if key in result})
     if 'processed_units' not in result:
         event.pop('processed_units')
     if 'normalized_records' not in result:
@@ -582,14 +584,49 @@ def stream_records(stream, format_name, provider, member):
             yield index, record
 
 
+def record_findings(record):
+    """Count review findings without conflating absent data with unnormalized fields."""
+    counts = dict.fromkeys(FINDING_COUNTS, 0)
+    for omission in record['omissions']:
+        reason = omission['reason']
+        if reason == 'Not present in export':
+            key = 'missing_source_fields'
+        elif reason == 'Explicit user-selected redaction; original snapshot remains local':
+            key = 'intentional_redactions'
+        elif reason in ('Document retained verbatim; roles, timestamps and conversation boundaries not inferred',
+                        'Unrecognized JSON object preserved as unverified profile context; not inferred preferences'):
+            key = 'reference_notices'
+        else:
+            key = 'record_omissions'
+        counts[key] += 1
+    return counts
+
+
+def add_findings(total, counts):
+    for key in FINDING_COUNTS:
+        total[key] += counts[key]
+
+
+def completion_phase(result):
+    if result.get('preserved_only_units', 0) + result.get('partially_normalized_units', 0) + result.get('record_omissions', 0):
+        return 'complete-with-omissions'
+    if any(result.get(key, 0) for key in FINDING_COUNTS[1:]):
+        return 'complete-with-notices'
+    return 'complete'
+
+
 def check_snapshot(store, data):
+    counts = dict.fromkeys(FINDING_COUNTS, 0)
     try:
         with store.source() as source:
             h.require(file_digest(source) == (data['source_sha256'], data['source_bytes']), 'source snapshot digest mismatch')
         for item in data['records']:
-            h.require(sha(store.read(item['file'])) == item['sha256'], 'record digest mismatch; reconcile checkpoint')
+            raw = store.read(item['file'])
+            h.require(sha(raw) == item['sha256'], 'record digest mismatch; reconcile checkpoint')
+            add_findings(counts, record_findings(bounded_json(raw)))
     except h.HandoffError as exc:
         raise IntegrityError(str(exc)) from exc
+    return counts
 
 
 def active(data):
@@ -597,8 +634,9 @@ def active(data):
         raise RetentionExpired('migration expired; create a fresh reviewed plan')
 
 
-def summary(data, digest):
-    return {'migration_id': data['id'], 'revision': data['revision'], 'checkpoint': digest,
+def summary(data, digest, findings=None):
+    return {**(findings or dict.fromkeys(FINDING_COUNTS, 0)),
+            'migration_id': data['id'], 'revision': data['revision'], 'checkpoint': digest,
             'processed_units': data['next_unit'], 'total_units': len(data['units']),
             'next_record': data['next_record'],
             'normalized_records': len(data['records']),
@@ -619,9 +657,9 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
             data, digest = store.checkpoint()
             h.require(digest == base_digest, 'stale checkpoint; review before resuming')
             active(data)
-            check_snapshot(store, data)
+            findings = check_snapshot(store, data)
             if on_progress:
-                on_progress(progress_event(summary(data, digest), 'processing', batch_number))
+                on_progress(progress_event(summary(data, digest, findings), 'processing', batch_number))
             stop = min(len(data['units']), data['next_unit'] + max_units)
             processed = 0
             with store.source() as source:
@@ -630,7 +668,7 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
                     while data['next_unit'] < stop:
                         active(data)
                         if should_pause and should_pause():
-                            result = summary(data, digest)
+                            result = summary(data, digest, findings)
                             result['paused'] = True
                             if on_progress:
                                 on_progress(progress_event(result, 'paused', batch_number))
@@ -647,7 +685,7 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
                                     if should_pause and should_pause():
                                         # Persist the exact in-memory cursor before reporting a safe pause.
                                         digest = store.save(data, digest)
-                                        result = summary(data, digest)
+                                        result = summary(data, digest, findings)
                                         result['paused'] = True
                                         if on_progress:
                                             on_progress(progress_event(result, 'paused', batch_number))
@@ -660,18 +698,19 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
                                     name = f'record-{i:05d}-{j:05d}.json'
                                     store.write(name, raw_record)
                                     data['records'].append({'file': name, 'sha256': sha(raw_record)})
+                                    add_findings(findings, record_findings(record))
                                     data['next_record'] = j + 1
                                     processed += 1
                                     if processed % 50 == 0:
                                         digest = store.save(data, digest)
                                         if on_progress:
-                                            on_progress(progress_event(summary(data, digest), 'processing', batch_number))
+                                            on_progress(progress_event(summary(data, digest, findings), 'processing', batch_number))
                                     if processed >= max_records:
                                         if processed % 50:
                                             digest = store.save(data, digest)
                                         check_snapshot(store, data)
                                         active(data)
-                                        return summary(data, digest)
+                                        return summary(data, digest, findings)
                             finally:
                                 if archive:
                                     member.close()
@@ -679,7 +718,7 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
                             # Track already-published records so an expired library stays purgeable.
                             digest = store.save(data, digest)
                             if on_progress:
-                                on_progress(progress_event(summary(data, digest), 'error', batch_number))
+                                on_progress(progress_event(summary(data, digest, findings), 'error', batch_number))
                             raise
                         except (StorageConflict, IntegrityError):
                             raise
@@ -690,13 +729,13 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
                         data['next_record'] = 0
                         digest = store.save(data, digest)
                         if on_progress:
-                            on_progress(progress_event(summary(data, digest), 'processing', batch_number))
+                            on_progress(progress_event(summary(data, digest, findings), 'processing', batch_number))
                 finally:
                     if archive:
                         archive.close()
             check_snapshot(store, data)
             active(data)
-            return summary(data, digest)
+            return summary(data, digest, findings)
     finally:
         store.close()
 
@@ -715,8 +754,7 @@ def auto_run(workspace, base_digest, max_units=20, max_records=1000, on_progress
             result['phase'] = 'paused'
             return result
         if result['complete']:
-            omissions = result['preserved_only_units'] + result['partially_normalized_units']
-            result['phase'] = 'complete-with-omissions' if omissions else 'complete'
+            result['phase'] = completion_phase(result)
             if on_progress:
                 on_progress(progress_event(result, result['phase'], batch))
             return result
@@ -732,8 +770,8 @@ def review(workspace, offset=0, limit=100):
     try:
         with store.lock():
             data, digest = store.checkpoint()
-            check_snapshot(store, data)
-            result = summary(data, digest)
+            findings = check_snapshot(store, data)
+            result = summary(data, digest, findings)
             result['omissions'] = data['omissions'][:100]
             result['omissions_total'] = len(data['omissions'])
             result['omissions_truncated'] = len(data['omissions']) > 100
@@ -819,7 +857,7 @@ def redact(workspace, base_digest, record_name, pointer):
             store.write(new_name, content)
             item.update(file=new_name, sha256=sha(content))
             data['redactions'].append({'record': new_name, 'pointer': pointer, 'previous': record_name})
-            return summary(data, store.save(data, digest))
+            return summary(data, store.save(data, digest), check_snapshot(store, data))
     finally:
         store.close()
 

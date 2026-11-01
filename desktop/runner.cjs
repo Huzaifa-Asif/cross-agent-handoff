@@ -13,11 +13,11 @@ function startProcess(executable, args, options={}) {
     let event=null;
     if(line.length<=4096){try{event=sanitizeProgress(JSON.parse(line));}catch{/* Non-progress diagnostics are bounded below. */}}
     if(event){
-      if (['complete','complete-with-omissions','planned','paused','error'].includes(event.phase)) terminalSeen=true;
+      if (['complete','complete-with-omissions','complete-with-notices','planned','paused','error'].includes(event.phase)) terminalSeen=true;
       else readyForPause=true;
       if(cancelled && readyForPause) sendTerm();
       const now=Date.now();
-      if(now-lastProgressAt>=100 || ['complete','complete-with-omissions','planned','paused','error'].includes(event.phase)) {
+      if(now-lastProgressAt>=100 || ['complete','complete-with-omissions','complete-with-notices','planned','paused','error'].includes(event.phase)) {
         lastProgressAt=now; options.onProgress?.(event);
       }
     } else if(diagnostics.length<65536) diagnostics+=(line+'\n').slice(0,65536-diagnostics.length);

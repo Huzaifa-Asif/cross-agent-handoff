@@ -111,4 +111,20 @@ test('renderer clears stale exports, unredacted previews and search when changin
   await click('task-tab');assert.equal(nodes.get('migration-screen').hidden,false);await click('new-migration');assert.equal(nodes.get('migration-work').hidden,false);
   documentHandlers.keydown({key:'Escape',preventDefault(){}});assert.equal(cancelCalls,1);documentHandlers.keydown({key:'Escape',preventDefault(){}});assert.equal(cancelCalls,1);bCheckpoint='c'.repeat(64);bRecords=42;finishRun({...library('B'),paused:true});await first;
   assert.match(nodes.get('status-message').textContent,/Paused safely/);assert.equal(nodes.get('process-batch').textContent,'Resume full migration');assert.equal(nodes.get('process-batch').disabled,false);
+  api.run=async()=>({...library('B'),complete:true,record_omissions:2,missing_source_fields:1,intentional_redactions:0,reference_notices:0});
+  await click('refresh-review');
+  assert.match(nodes.get('migration-phase').textContent,/Finished with omissions/);
+  assert.match(nodes.get('migration-phase').textContent,/2 record omissions/);
+  assert.match(nodes.get('migration-phase').textContent,/1 missing source fields/);
+  assert.doesNotMatch(nodes.get('migration-phase').textContent,/100/);
+  assert.equal(nodes.get('progress').hidden,true);assert.equal(nodes.get('record-count').textContent,'42 / 42');
+  api.run=async()=>({...library('B'),complete:true,record_omissions:0,missing_source_fields:1,intentional_redactions:1,reference_notices:0});
+  await click('refresh-review');
+  assert.match(nodes.get('migration-phase').textContent,/Processing finished; review source-data notices/);
+  assert.match(nodes.get('migration-phase').textContent,/0 record omissions/);
+  assert.match(nodes.get('migration-phase').textContent,/1 intentional redactions/);
+  assert.equal(nodes.get('progress').hidden,true);
+  api.run=async()=>({...library('B'),complete:true,record_omissions:0,missing_source_fields:0,intentional_redactions:0,reference_notices:0});
+  await click('refresh-review');assert.equal(nodes.get('progress').value,100);assert.equal(nodes.get('progress').hidden,false);
+
 });

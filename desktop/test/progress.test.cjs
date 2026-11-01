@@ -74,3 +74,23 @@ test('a pause racing a completed event allows its final result to exit normally'
  const script=`process.stderr.write(JSON.stringify(${JSON.stringify(done)})+'\\n');setTimeout(()=>process.stdout.write('{"complete":true}'),50);`;
  job=startProcess(process.execPath,['-e',script],{allowPause:true,onProgress:()=>job.cancel()});assert.equal(JSON.parse(await job.promise).complete,true);assert.equal(job.process.signalCode,null);
 });
+
+test('record omissions and source-data notices stay distinct and cannot claim full coverage',()=>{
+ const counts={record_omissions:2,missing_source_fields:3,intentional_redactions:1,reference_notices:4};
+ const safe=sanitizeProgress({...sample,...counts,phase:'complete-with-omissions',complete:true,total_records:20,progress_percent:100});
+ for(const [key,count] of Object.entries(counts))assert.equal(safe[key],count);
+ assert.equal(safe.omitted_units,0);assert.equal(safe.total_records,20);assert.equal(safe.progress_percent,null);
+ for(const key of Object.keys(counts)){
+  assert.equal(sanitizeProgress({...sample,[key]:1,phase:'complete',complete:true,progress_percent:100}).progress_percent,null);
+  assert.equal(sanitizeProgress({...sample,[key]:'<untrusted>'})[key],undefined);
+ }
+ const notices=sanitizeProgress({...sample,phase:'complete-with-notices',missing_source_fields:1,complete:true,total_records:20,progress_percent:100});
+ assert.equal(notices.phase,'complete-with-notices');assert.equal(notices.record_omissions,undefined);assert.equal(notices.progress_percent,null);
+});
+
+test('notice-only completion is delivered immediately and a late pause does not signal a finished worker',async()=>{
+ const done={...sample,phase:'complete-with-notices',complete:true,total_records:20,progress_percent:null,missing_source_fields:1};let job;const phases=[];
+ const script=`process.stderr.write(JSON.stringify(${JSON.stringify(sample)})+'\\n');setTimeout(()=>{process.stderr.write(JSON.stringify(${JSON.stringify(done)})+'\\n');setTimeout(()=>process.stdout.write('{"complete":true}'),50);},10);`;
+ job=startProcess(process.execPath,['-e',script],{allowPause:true,onProgress:event=>{phases.push(event.phase);if(event.phase==='complete-with-notices')job.cancel();}});
+ assert.equal(JSON.parse(await job.promise).complete,true);assert.ok(phases.includes('complete-with-notices'));assert.equal(job.process.signalCode,null);
+});

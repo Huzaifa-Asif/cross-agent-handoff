@@ -71,17 +71,20 @@ function renderProgress() {
   const totalUnits = Math.max(progress?.total_units ?? 0, library.total_units);
   const records = Math.max(progress?.processed_records ?? 0, library.normalized_records);
   const omitted = Math.max(progress?.omitted_units ?? 0, (library.preserved_only_units || 0) + (library.partially_normalized_units || 0));
+  const findings = Object.fromEntries(['record_omissions','missing_source_fields','intentional_redactions','reference_notices'].map(key => [key, progress?.[key] ?? library[key] ?? 0]));
+  const hasNotices = findings.missing_source_fields + findings.intentional_redactions + findings.reference_notices > 0;
   const finished = progress?.complete ?? library.complete;
   const total = progress ? progress.total_records : finished && omitted === 0 ? library.normalized_records : null;
   $('unit-count').textContent = `${units} / ${totalUnits}`;
   $('record-count').textContent = `${records} / ${total ?? 'unknown'}`;
   $('opaque-count').textContent = String(omitted);
-  const phase = progress?.phase || (state.paused ? 'paused' : finished ? omitted ? 'complete-with-omissions' : 'complete' : 'ready');
+  const phase = progress?.phase || (finished ? omitted || findings.record_omissions ? 'complete-with-omissions' : hasNotices ? 'complete-with-notices' : 'complete' : state.paused ? 'paused' : 'ready');
   const percentage = progress ? progress.progress_percent : phase === 'complete' ? 100 : null;
-  const phaseText = {checking:'Checking the saved source and checkpoint',processing:'Processing local records', 'batch-complete':'Batch checkpoint saved; continuing automatically',complete:'Complete for the selected export', 'complete-with-omissions':'Finished with omissions; inspect preserved-only or partially normalized data',paused:'Paused safely; resume from the saved checkpoint',error:'Stopped with an error; review the saved checkpoint',ready:'Ready for automatic processing'}[phase];
-  $('migration-phase').textContent = `${phaseText}${percentage === null ? ' · percentage unavailable until enough totals are known' : ` · ${percentage.toFixed(1)}%`}${progress?.batch_number ? ` · batch ${progress.batch_number}` : ''}`;
+  const phaseText = {checking:'Checking the saved source and checkpoint',processing:'Processing local records', 'batch-complete':'Batch checkpoint saved; continuing automatically',complete:'Complete for the selected export', 'complete-with-omissions':'Finished with omissions; inspect file and record findings', 'complete-with-notices':'Processing finished; review source-data notices and intentional changes',paused:'Paused safely; resume from the saved checkpoint',error:'Stopped with an error; review the saved checkpoint',ready:'Ready for automatic processing'}[phase];
+  $('migration-phase').textContent = `${phaseText}${percentage === null ? finished ? ' · review findings before sharing' : ' · percentage unavailable until enough totals are known' : ` · ${percentage.toFixed(1)}%`}${progress?.batch_number ? ` · batch ${progress.batch_number}` : ''}`;
+  $('migration-phase').textContent += ` · ${findings.record_omissions} record omissions · ${findings.missing_source_fields} missing source fields · ${findings.intentional_redactions} intentional redactions · ${findings.reference_notices} reference notices`;
   $('progress').max = 100;
-  $('progress').hidden = ['error','complete-with-omissions'].includes(phase) || phase === 'paused' && percentage === null;
+  $('progress').hidden = ['error','complete-with-omissions','complete-with-notices'].includes(phase) || phase === 'paused' && percentage === null;
   if (percentage === null) $('progress').removeAttribute('value'); else $('progress').value = percentage;
 }
 function screen(name) {
@@ -101,7 +104,7 @@ async function review() {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'record-item';
     const listItem = document.createElement('div'); listItem.setAttribute('role', 'listitem');
     const label = document.createElement('span'); label.textContent = typeof item.title === 'string' && item.title ? item.title : item.file;
-    const small = document.createElement('small'); small.textContent = `${item.kind} · ${item.messages} messages · ${item.omissions_total ?? item.omissions.length} field omissions`;
+    const small = document.createElement('small'); small.textContent = `${item.kind} · ${item.messages} messages · ${item.omissions_total ?? item.omissions.length} review findings`;
     button.append(label, small); button.addEventListener('click', () => selectRecord(item.file, button)); listItem.append(button); container.append(listItem);
   }
   if (!result.records.length) {const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'No normalized records. Review the preserved-only files below; your original snapshot is still local.'; container.append(p);}
@@ -178,8 +181,9 @@ $('process-batch').addEventListener('click', () => perform('Checking the local l
   const result = await api.run('migration-run', {workspace: state.workspace.handle, checkpoint: state.library.checkpoint});
   state.library = result; state.paused = result.paused === true; state.progress = null;
   await review();
-  const omitted = (state.library.preserved_only_units || 0) + (state.library.partially_normalized_units || 0);
-  status(state.paused ? 'Paused safely at the saved checkpoint. Resume full migration now or reopen this library later.' : state.library.complete ? omitted ? 'Finished with omissions. Review preserved-only data and all record omissions before sharing.' : 'Processing complete for the selected export. Review all records and omissions before sharing.' : 'Processing stopped before completion. Review the saved checkpoint before resuming.');
+  const omitted = (state.library.preserved_only_units || 0) + (state.library.partially_normalized_units || 0) + (state.library.record_omissions || 0);
+  const notices = (state.library.missing_source_fields || 0) + (state.library.intentional_redactions || 0) + (state.library.reference_notices || 0);
+  status(state.paused ? 'Paused safely at the saved checkpoint. Resume full migration now or reopen this library later.' : state.library.complete ? omitted ? 'Finished with omissions. Review preserved-only data and all record omissions before sharing.' : notices ? 'Processing finished with source-data notices or intentional changes. Review the separate finding counts before sharing.' : 'Processing complete for the selected export. Review all records and omissions before sharing.' : 'Processing stopped before completion. Review the saved checkpoint before resuming.');
 }));
 $('refresh-review').addEventListener('click', () => perform('Verifying snapshot, checkpoint and record hashes…', async () => {await review(); state.progress = null; if (!state.library.expired) status('Local integrity checks passed. Review content and omissions; hashes do not establish author identity.');}));
 $('redact-record').addEventListener('click', () => perform('Creating a redacted record revision…', async () => {

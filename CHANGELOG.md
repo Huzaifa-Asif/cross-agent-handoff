@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased maintenance
+
+- Surface record-level migration findings in CLI progress and desktop completion, including reopened 1.0 libraries. Distinguish source-only field/layout omissions from absent source values, explicit redactions and reference notices; retain known record totals without a false 100% fidelity claim.
+- Deliver notice-only terminal progress before throttling, and preserve finished-state presentation after a prior pause. Checkpoint, record and portable-library schemas remain unchanged.
+
 ## 1.0.0 — 2026-11-01
 
 - Separate focused task handoffs from deliberate, local long-term migration of explicitly selected history exports.

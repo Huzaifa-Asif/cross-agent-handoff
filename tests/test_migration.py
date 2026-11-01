@@ -328,9 +328,10 @@ class MigrationTests(unittest.TestCase):
         self.assertTrue(done['complete'])
         self.assertEqual(done['normalized_records'], 7)
         self.assertEqual(done['batches_this_run'], 4)
-        self.assertEqual(events[-1]['phase'], 'complete')
-        self.assertEqual(events[-1]['progress_percent'], 100)
+        self.assertEqual(events[-1]['phase'], 'complete-with-omissions')
+        self.assertIsNone(events[-1]['progress_percent'])
         self.assertNotIn('processed_records', events[0])
+        self.assertNotIn('record_omissions', events[0])
         self.assertTrue(all(item['total_records'] is None for item in events if not item['complete']))
         again = m.auto_run(self.workspace, done['checkpoint'])
         self.assertEqual(again['checkpoint'], done['checkpoint'])
@@ -385,7 +386,8 @@ class MigrationTests(unittest.TestCase):
         self.assertTrue(done['complete'])
         self.assertEqual(done['normalized_records'], 1000)
         events = [json.loads(line) for line in resumed.stderr.splitlines()]
-        self.assertEqual(events[-1]['phase'], 'complete')
+        self.assertEqual(events[-1]['phase'], 'complete-with-omissions')
+        self.assertGreater(done['record_omissions'], 0)
         self.assertGreater(done['batches_this_run'], 1)
         self.assertEqual(len({row['file'] for row in m.review(self.workspace, limit=1000)['records']}), 1000)
 
@@ -485,6 +487,79 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(handler_states, [True])
         self.assertEqual(signal.getsignal(signal.SIGTERM), previous)
+
+
+    def test_record_omission_counts_survive_resume_without_checkpoint_schema_changes(self):
+        values = [{'id': str(i), 'messages': [{'role': 'user', 'text': 'Launch plan',
+                   'timestamp': '2026-01-01T00:00:00Z', 'branch_metadata': {'parent': 'PRIVATE-METADATA'}}]}
+                  for i in range(3)]
+        start = self.plan(values, 'generic-json')
+        first = m.run(self.workspace, start['checkpoint'], max_records=1)
+        self.assertEqual(first['record_omissions'], 1)
+        self.assertEqual(first['missing_source_fields'], 0)
+        checkpoint = json.loads((self.workspace / 'checkpoint.json').read_bytes())
+        self.assertEqual(set(checkpoint['data']['records'][0]), {'file', 'sha256'})
+        before_review = (self.workspace / 'checkpoint.json').read_bytes()
+        self.assertEqual(m.review(self.workspace)['record_omissions'], 1)
+        self.assertEqual((self.workspace / 'checkpoint.json').read_bytes(), before_review)
+        events = []
+        done = m.auto_run(self.workspace, first['checkpoint'], max_records=1, on_progress=events.append)
+        self.assertEqual(done['record_omissions'], 3)
+        self.assertEqual(done['phase'], 'complete-with-omissions')
+        self.assertEqual(events[-1]['total_records'], 3)
+        self.assertTrue(all(event['progress_percent'] != 100 for event in events))
+        self.assertNotIn('PRIVATE-METADATA', json.dumps(events))
+        again = m.auto_run(self.workspace, done['checkpoint'])
+        self.assertEqual(again['record_omissions'], 3)
+        self.assertEqual(again['checkpoint'], done['checkpoint'])
+        m.export(self.workspace, done['checkpoint'], self.output, 'generic')
+        self.assertEqual(m.verify_export(self.output)['verified_files'], 6)
+        for row in m.review(self.workspace)['records']:
+            record = m.show(self.workspace, row['file'])
+            self.assertEqual(json.loads((self.output / row['file']).read_bytes()), record)
+            self.assertEqual(record['omissions'][0]['fields'], ['branch_metadata'])
+
+    def test_missing_source_values_are_not_reported_as_dropped_metadata(self):
+        start = self.plan([{'id': 'ops', 'messages': [{'role': 'user', 'text': 'Supplier pending'}]}], 'generic-json')
+        events = []
+        done = m.auto_run(self.workspace, start['checkpoint'], on_progress=events.append)
+        self.assertEqual(done['record_omissions'], 0)
+        self.assertEqual(done['missing_source_fields'], 1)
+        self.assertEqual(done['phase'], 'complete-with-notices')
+        self.assertEqual(events[-1]['missing_source_fields'], 1)
+        self.assertIsNone(events[-1]['progress_percent'])
+        self.assertEqual(events[-1]['total_records'], 1)
+        record = m.show(self.workspace, m.review(self.workspace)['records'][0]['file'])
+        self.assertIsNone(record['messages'][0]['timestamp'])
+
+    def test_clean_completion_and_redaction_have_distinct_progress(self):
+        value = [{'messages': [{'role': 'user', 'text': 'PRIVATE TEXT', 'timestamp': '2026-01-01T00:00:00Z'}]}]
+        start = self.plan(value, 'generic-json')
+        events = []
+        done = m.auto_run(self.workspace, start['checkpoint'], on_progress=events.append)
+        self.assertEqual(done['phase'], 'complete')
+        self.assertEqual(events[-1]['progress_percent'], 100)
+        name = m.review(self.workspace)['records'][0]['file']
+        redacted = m.redact(self.workspace, done['checkpoint'], name, '/messages/0/text')
+        self.assertEqual(redacted['intentional_redactions'], 1)
+        self.assertEqual(redacted['record_omissions'], 0)
+        self.assertEqual(m.review(self.workspace)['intentional_redactions'], 1)
+        reopened = m.auto_run(self.workspace, redacted['checkpoint'])
+        self.assertEqual(reopened['phase'], 'complete-with-notices')
+        self.assertEqual(reopened['missing_source_fields'], 0)
+        self.assertEqual(reopened['intentional_redactions'], 1)
+        m.export(self.workspace, reopened['checkpoint'], self.output, 'generic')
+        self.assertTrue(m.verify_export(self.output)['verified_files'])
+        self.assertTrue(all(b'PRIVATE TEXT' not in path.read_bytes() for path in self.output.iterdir()))
+
+    def test_document_reference_notices_are_not_source_only_field_omissions(self):
+        self.input.write_text('Literal reference, without inferred roles or timestamps.')
+        start = m.plan(self.input, self.workspace, 'generic', 'documents')
+        done = m.auto_run(self.workspace, start['checkpoint'])
+        self.assertEqual(done['phase'], 'complete-with-notices')
+        self.assertEqual(done['reference_notices'], 1)
+        self.assertEqual(done['record_omissions'], 0)
+        self.assertEqual(done['missing_source_fields'], 0)
 
 
 if __name__ == '__main__':
