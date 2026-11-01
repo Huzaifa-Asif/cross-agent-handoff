@@ -1,0 +1,2 @@
+# Keep source bytes reproducible across native and cross-platform desktop builds.
+* text=auto eol=lf

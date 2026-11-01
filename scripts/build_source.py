@@ -6,7 +6,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 root_names = {'README.md', 'CHANGELOG.md', 'CHECKPOINT.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md',
               'LICENSE', 'SECURITY.md', '.gitignore', 'handoff.py', 'handoff_mcp.py', 'migration.py',
-              'package.json', 'pyrightconfig.json', 'windows_io.py'}
+              'package.json', 'pyrightconfig.json', 'windows_io.py', '.gitattributes'}
 files = [p for p in root.rglob('*') if p.is_file() and not p.is_symlink()
          and ((p.parent == root and p.name in root_names) or p.relative_to(root).parts[0] in
               ('docs', 'examples', 'tests', 'scripts', '.github', 'integrations', 'bin', 'desktop'))
