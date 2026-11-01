@@ -83,10 +83,11 @@ test('renderer clears stale exports, unredacted previews and search when changin
   const html=fs.readFileSync(path.resolve(__dirname,'../index.html'),'utf8');
   for(const match of html.matchAll(/<([a-z]+)[^>]*\bid="([^"]+)"/g)) nodes.set(match[2],new Element(match[1]));
   const libraries=['A','B']; let progressListener,finishRun,runCalls=0,cancelCalls=0,bRecords=1,bCheckpoint='b'.repeat(64);
-  const library=name=>({checkpoint:name==='A'?'a'.repeat(64):bCheckpoint,processed_units:name==='A'?1:0,total_units:1,normalized_records:name==='A'?1:bRecords,preserved_only_units:0,redactions:0,complete:name==='A',record_offset:0,has_more_records:false,omissions:[],records:[{file:'record-00000-00000.json',kind:'conversation',title:name,messages:1,omissions:[]}]});
+  const library=name=>({migration_id:name==='A'?'11111111-1111-4111-8111-111111111111':'22222222-2222-4222-8222-222222222222',checkpoint:name==='A'?'a'.repeat(64):bCheckpoint,processed_units:name==='A'?1:0,total_units:1,normalized_records:name==='A'?1:bRecords,preserved_only_units:0,redactions:0,complete:name==='A',record_offset:0,has_more_records:false,omissions:[],records:[{file:'record-00000-00000.json',kind:'conversation',title:name,messages:1,omissions:[]}]});
   const api={onProgress:callback=>{progressListener=callback;return()=>{};},cancel:async()=>{cancelCalls++;},status:async()=>({ready:true,version:'1',python:'3.14'}),choose:async kind=>kind==='workspace'?{handle:libraries.shift(),label:'library'}:{handle:'output',label:'old-export'},run:async(action,input)=>{
     if(action==='migration-run'){runCalls++;return new Promise(resolve=>{finishRun=resolve;});}
     if(action==='migration-review')return library(input.workspace);
+    if(action==='migration-export')return{output_created:true,checkpoint:library(input.workspace).checkpoint,records:library(input.workspace).normalized_records,target_label:input.target};
     if(action==='migration-search')return{checkpoint:'a'.repeat(64),matched_records:1,results:[{file:'record-00000-00000.json',preview:'UNREDACTED A'}]};
     if(action==='migration-show')return{messages:[{text:'UNREDACTED A'}]};
     return{};

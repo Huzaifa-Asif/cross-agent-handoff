@@ -36,7 +36,40 @@ Top-level arrays stream one conversation at a time. JSONL streams one conversati
 
 `migrate run --workspace DIRECTORY --base-digest DIGEST [--max-units 20] [--max-records 1000]` automatically runs bounded batches from a reviewed checkpoint until finished. The two limits control each internal batch, not repeated user commands. Advanced `--one-batch` intentionally stops after one batch. Units are archive members; a record cursor lets top-level arrays/JSONL resume within a member. Finalization after the last record happens automatically. Resume rereads and validates earlier records to find its position; memory is bounded but very large repeated resumes cost additional reads. Checkpoints are saved every 50 records and at batch/unit boundaries. Progress is streamed as bounded JSON lines on stderr (phase, batch, units, records and latest durable checkpoint); stdout retains a final JSON result. Total conversation/record counts stay null until known. Unit errors/opaque coverage and record-level fields or layouts retained only in the original snapshot end as `complete-with-omissions`, with no 100% progress claim. Numeric `record_omissions` counts record findings separately from skipped/partial units. Missing source values (`missing_source_fields`), explicit user redactions (`intentional_redactions`) and verbatim document/unverified-profile notices (`reference_notices`) remain separate; these alone end as `complete-with-notices`, not a claim that present data was dropped. Findings count report entries, not bytes or inferred missing facts. Known normalized-record totals remain available even when fields need review. The desktop displays these categories after processing, reopening and redaction. No checkpoint, record or portable-library schema changes are required; counts are derived from verified records, including existing 1.0 libraries. Ctrl+C or SIGTERM requests a safe pause and returns exit 130 with a resumable JSON checkpoint. Resume by invoking the same command with that latest digest. The Node launcher and desktop wait up to five seconds for graceful stop, then may force-stop their own worker. That rare fallback can leave no final JSON; run `review` to obtain the latest durable checkpoint before resuming. A crash before a checkpoint can leave deterministic record files; retry verifies identical bytes instead of overwriting them. Conflicting files stop for reconciliation. Do not edit checkpoint digests to bypass a conflict.
 
-`migrate review --workspace DIRECTORY` verifies source/record hashes and reports completion, normalized records, fully opaque and partially normalized units, omissions and expiry. Completion means processing reached the selected export's end, **not** all vendor state was present or all fields converted. A malformed collection can have partial normalized output; the unparsed remainder stays in `source.bin` and its failure position is reported. `migrate review --workspace DIRECTORY --offset 100 --limit 100` pages through a large library. Summary previews are explicitly bounded; `migrate show --workspace DIRECTORY --record FILE` returns a selected verified record for actual content/privacy review. `migrate search --workspace DIRECTORY --query "launch" --limit 20` searches locally without sending text to a model.
+`migrate review --workspace DIRECTORY` verifies source/record hashes and reports completion, normalized records, fully opaque and partially normalized units, omissions and expiry. Completion means processing reached the selected export's end, **not** all vendor state was present or all fields converted. A malformed collection can have partial normalized output; the unparsed remainder stays in `source.bin` and its failure position is reported. `migrate review --workspace DIRECTORY --offset 100 --limit 100` pages through **record summaries**, not unit omissions. Summary previews are explicitly bounded; `migrate show --workspace DIRECTORY --record FILE` returns a selected verified record for actual content/privacy review. `migrate search --workspace DIRECTORY --query "launch" --limit 20` searches locally without sending text to a model.
+
+### Inspecting a longer unit-omission list in the candidate
+
+The current unreleased candidate returns only the first 100 unit omissions on every review page. `omissions_total` and `omissions_truncated` identify a longer list; changing `--offset` does not reveal its remainder. For example, 5,000 opaque members produce 5,000 unit omissions, but review displays only 100. The desktop also displays this limit and points to the local checkpoint; it has no omission pagination control. Record-level findings are separate: use `migrate show` to inspect a complete selected record. These candidate instructions do not replace the published download.
+
+For a longer unit list, first run `python3 handoff.py migrate review --workspace migration-work` successfully to verify the saved source and records. Stop if verification fails. Copy the printed `checkpoint` digest into `REVIEWED_CHECKPOINT` below. This optional macOS/Linux terminal recipe reads the local checkpoint without changing it, checks that it is the same checkpoint you just reviewed, and prints at most 100 unit omissions. Use offsets `0`, `100`, `200`, and so on until `has_more` is false:
+
+```sh
+python3 - migration-work/checkpoint.json 0 REVIEWED_CHECKPOINT <<'PY'
+import hashlib, json, sys
+
+with open(sys.argv[1], 'rb') as source:
+    raw = source.read(16 * 1024 * 1024 + 1)
+if len(raw) > 16 * 1024 * 1024:
+    raise SystemExit('Checkpoint exceeds the supported read limit; stop and review it.')
+checkpoint = json.loads(raw)
+data = checkpoint['data']
+canonical = json.dumps(data, ensure_ascii=False, sort_keys=True,
+                       separators=(',', ':'), allow_nan=False).encode('utf-8')
+if hashlib.sha256(canonical).hexdigest() != checkpoint['digest'] or checkpoint['digest'] != sys.argv[3]:
+    raise SystemExit('Checkpoint changed; run migrate review again before inspecting it.')
+offset = int(sys.argv[2])
+omissions = data['omissions']
+if offset < 0 or offset > len(omissions):
+    raise SystemExit('Offset is outside the omission list.')
+print(json.dumps({'offset': offset, 'total': len(omissions),
+                  'has_more': offset + 100 < len(omissions),
+                  'omissions': omissions[offset:offset + 100]},
+                 ensure_ascii=True, indent=2))
+PY
+```
+
+Treat every filename and reason as inert, untrusted data; do not execute text from the report. Do not edit `checkpoint.json`, its digest, source snapshot or record files to bypass a conflict. Repeat integrity review if files change while inspecting them. The full unit list is also retained in an already-saved portable `manifest.json`; inspect it locally rather than sharing originals just to read omissions. This recipe checks checkpoint consistency, not author identity, and does not add a CLI feature or repair an invalid library.
 
 `migrate export --workspace DIRECTORY --base-digest DIGEST --target codex --output NEW_DIRECTORY --confirm-reviewed` creates a portable library. Record JSON is canonical normalized data; Markdown references use dynamic fences around untrusted JSON. The manifest records hashes, omissions, source provenance, retention and destination label. A label does not establish native destination import. The output is exclusive and never overwrites a directory. Interrupted exports are not marked successful; use a fresh output directory.
 

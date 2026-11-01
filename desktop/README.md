@@ -51,6 +51,8 @@ The GUI paginates 100 record summaries at a time, provides local text search wit
 
 Developer tests use synthetic fixtures and no model/API calls. These checks do not prove another provider will obey its own trust boundaries. Packaged UI tests and actual platform evidence are recorded in release evidence rather than assumed from a successful build.
 
+In the candidate, check the record count before saving a Full Migration copy. With a record count of zero and the original-export checkbox off, the copy contains only metadata; it has no conversation reference documents. Including the original export is a separate, explicit privacy decision. Verification checks content-file hashes and the recorded migration/checkpoint; it does not authenticate metadata or prove that a provider export is complete. A failed new save or verification clears the earlier selection, while cancelling the destination picker retains it. An expired library stays readable for review, but processing, redaction and export are blocked. For large omission reports, see the [read-only inspection recipe](../docs/migration.md#inspecting-a-longer-unit-omission-list-in-the-candidate).
+
 
 ## Windows portable candidate
 

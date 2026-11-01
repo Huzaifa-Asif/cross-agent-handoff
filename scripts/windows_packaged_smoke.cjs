@@ -139,6 +139,40 @@ async function main() {
     assert.match(await page.locator('#format-choice').innerText(),/choice is kept/);
     await page.locator('#source-provider').selectOption('generic');
     assert.match(await page.locator('#format-guidance').innerText(),/Generic JSON/);
+    // A malformed selected source is preserved with omissions, not described as
+    // exported conversation content when the default copy contains only metadata.
+    const emptySource=path.join(evidence,'malformed-selected.json');
+    const emptyWorkspace=path.join(evidence,'metadata-only-library'),emptyOutput=path.join(evidence,'metadata-only-copy');
+    await fs.writeFile(emptySource,'{');
+    await choose(emptySource,true); await page.locator('#choose-source').click(); await idle();
+    await choose(emptyWorkspace); await page.locator('#choose-workspace').click(); await idle();
+    await page.locator('#confirm-migration').check();
+    await page.locator('#plan-migration').click(); await idle();
+    await page.locator('#process-batch').click(); await idle();
+    assert.equal(await page.locator('#record-count').innerText(),'0 / unknown');
+    assert.equal(await page.locator('#opaque-count').innerText(),'1');
+    assert.doesNotMatch(await page.locator('#migration-phase').innerText(),/100\.0%/);
+    assert.match(await page.locator('#migration-export-description').innerText(),/metadata only: no conversations/i);
+    await page.locator('#confirm-reviewed').check();
+    await choose(emptyOutput); await page.locator('#export-migration').click(); await idle();
+    assert.match(await page.locator('#status-message').innerText(),/contains no conversations, reference documents or original export/i);
+    assert.deepEqual((await fs.readdir(emptyOutput)).sort(),['README.txt','manifest.json']);
+    await page.locator('#verify-export').click(); await idle();
+    assert.match(await page.locator('#status-message').innerText(),/no content-file hashes to check/i);
+    assert.equal(await fs.readFile(emptySource,'utf8'),'{');
+    const metadataBefore=await Promise.all(['README.txt','manifest.json'].map(name=>fs.readFile(path.join(emptyOutput,name))));
+    const rejectedDestination=path.join(evidence,'existing-metadata-destination');
+    await fs.mkdir(rejectedDestination); await fs.writeFile(path.join(rejectedDestination,'sentinel.txt'),'Preserve synthetic existing data');
+    await choose(rejectedDestination); await page.locator('#export-migration').click();
+    await page.locator('#cancel-operation').waitFor({state:'hidden'});
+    assert.equal(await page.locator('#status-box').evaluate(element=>element.classList.contains('error')),true);
+    assert.equal(await page.locator('#verify-export').isHidden(),true);
+    assert.equal(await fs.readFile(path.join(rejectedDestination,'sentinel.txt'),'utf8'),'Preserve synthetic existing data');
+    assert.deepEqual((await fs.readdir(emptyOutput)).sort(),['README.txt','manifest.json']);
+    for (const [index,name] of ['README.txt','manifest.json'].entries()) assert.deepEqual(await fs.readFile(path.join(emptyOutput,name)),metadataBefore[index]);
+    await page.locator('#new-migration').click();
+    await page.locator('#source-provider').selectOption('generic');
+    await page.locator('#source-format').selectOption('generic-json');
     await choose(source,true); await page.locator('#choose-source').click(); await idle();
     await choose(workspace); await page.locator('#choose-workspace').click(); await idle();
     await page.locator('#confirm-migration').check();
@@ -162,6 +196,40 @@ async function main() {
     await choose(output); await page.locator('#export-migration').click(); await idle();
     await page.locator('#verify-export').click(); await idle();
     assert.match(await page.locator('#status-message').innerText(),/^2500 portable files verified/);
+    const firstManifest=await fs.readFile(path.join(output,'manifest.json'));
+    await app.evaluate(({dialog})=>{dialog.showSaveDialog=async()=>({canceled:true});});
+    await page.locator('#export-migration').click(); await idle();
+    assert.equal(await page.locator('#verify-export').isHidden(),false);
+    assert.match(await page.locator('#status-message').innerText(),/earlier saved copy is still selected/i);
+    // This destination passes main-process selection. Corrupt only our synthetic
+    // cached snapshot to exercise a genuine post-selection backend failure.
+    const failedDestination=path.join(evidence,'failed-new-copy');
+    const failureSnapshotPath=path.join(workspace,'source.bin');
+    const preservedSnapshot=await fs.readFile(failureSnapshotPath);
+    try {
+      await fs.appendFile(failureSnapshotPath,'\n');
+      await choose(failedDestination); await page.locator('#export-migration').click();
+      await page.locator('#cancel-operation').waitFor({state:'hidden'});
+      assert.equal(await page.locator('#status-box').evaluate(element=>element.classList.contains('error')),true);
+      assert.equal(await page.locator('#verify-export').isHidden(),true);
+      assert.ok((await page.locator('#export-location').innerText()).includes(failedDestination));
+      await assert.rejects(fs.access(failedDestination),{code:'ENOENT'});
+    } finally {await fs.writeFile(failureSnapshotPath,preservedSnapshot);}
+    assert.deepEqual(await fs.readFile(path.join(output,'manifest.json')),firstManifest);
+    const recoveredCopy=path.join(evidence,'reviewed-copy-again');
+    await page.locator('#confirm-reviewed').check();
+    await choose(recoveredCopy); await page.locator('#export-migration').click(); await idle();
+    await page.locator('#verify-export').click(); await idle();
+    const recoveredManifestPath=path.join(recoveredCopy,'manifest.json');
+    const recoveredManifest=await fs.readFile(recoveredManifestPath);
+    const changedManifest=JSON.parse(recoveredManifest);changedManifest.checkpoint='0'.repeat(64);
+    await fs.writeFile(recoveredManifestPath,JSON.stringify(changedManifest));
+    await page.locator('#verify-export').click();
+    await page.locator('#cancel-operation').waitFor({state:'hidden'});
+    assert.equal(await page.locator('#status-box').evaluate(element=>element.classList.contains('error')),true);
+    assert.equal(await page.locator('#verify-export').isHidden(),true);
+    assert.match(await page.locator('#status-message').innerText(),/could not be verified as the selected copy/i);
+    await fs.writeFile(recoveredManifestPath,recoveredManifest);
     const checkpointBefore=await fs.readFile(path.join(workspace,'checkpoint.json'));
     const oldState=JSON.parse(checkpointBefore).data;
     const oldRecordName=oldState.records[0].file;
@@ -201,7 +269,7 @@ async function main() {
     await assert.rejects(fs.access(path.join(redactedOutput,'original-export.bin')),{code:'ENOENT'});
     await capture(page,evidence,'windows-complete');
     const result = {platform:process.platform,executablePath,ready,records:recordCount,verifiedFiles:recordCount*2,packageFiles:await packageManifest(path.dirname(executablePath)),
-      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','business and developer saved snapshots preserve all fields','separate creation and read-only review','explicit task review confirmation','informational task expiry','digest-bound reference export','stale source rejected without output','reopen and review recovery','cancelled open clears prior task','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state','explicit guided redaction','selection does not apply','old exports/revisions/snapshot unchanged','new redacted export verified','raw source excluded after redaction'],
+      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','business and developer saved snapshots preserve all fields','separate creation and read-only review','explicit task review confirmation','informational task expiry','digest-bound reference export','stale source rejected without output','reopen and review recovery','cancelled open clears prior task','malformed selected source has honest zero-record omissions','metadata-only copy explicitly contains no conversation data','no false zero-file metadata authentication','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','cancelled destination preserves earlier selected copy','failed new destination clears prior verification selection','existing data unchanged after failure','changed portable checkpoint rejected in current-copy verification','fresh-copy export recovery','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state','explicit guided redaction','selection does not apply','old exports/revisions/snapshot unchanged','new redacted export verified','raw source excluded after redaction'],
       gaps:['OS file picker uses documented synthetic dialog stubs','no signing or installer/SmartScreen validation','screenshots require human inspection; CI save alone is not visual review']};
     await fs.writeFile(path.join(evidence,'validation.json'),JSON.stringify(result,null,2));
     console.log(JSON.stringify(result));

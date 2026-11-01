@@ -89,8 +89,17 @@ async function inspectTask(selected) {
   $('task-summary-limit').textContent=truncated?'One or more summaries reached the 16 KiB display limit. Use Review all saved fields below for complete content before sharing. The saved file is unchanged.':'Goal, context and preferences above are saved content. Review all saved fields below for decisions, constraints, repository, files, tests, artifacts, omissions and other supplied data.';
   $('task-create').hidden=true;$('task-review').hidden=false;$('confirm-task-reviewed').checked=false;$('task-all-fields').open=false;renderTaskPage();
 }
+function clearSavedOutput(label='') {
+  state.output=null; $('export-location').textContent=label; $('verify-export').hidden=true;
+}
+function describeNextExport() {
+  if(!state.library)return;
+  const original=$('include-original').checked;
+  const content=state.library.normalized_records===0 ? original ? 'The next export will contain migration metadata and the original selected export, but no parsed conversations or reference documents. The original may contain secrets or unsupported data; review it before sharing.' : 'The next export will contain migration metadata only: no conversations, reference documents or original export. Your selected source remains in this local library. Review the omissions before deciding what to keep or share.' : 'The next export will contain normalized JSON and Markdown records with a manifest. '+(original?'It will also include the original selected export, which may contain secrets or unsupported data.':'Original export bytes are excluded; they stay in this local library.');
+  $('migration-export-description').textContent=content+' This describes your next export, not any previously saved copy. Nothing is uploaded here. This portable library does not populate native history; Gemini’s separate native importer accepts only its supported original archives.';
+}
 function invalidateExport() {
-  state.output = null; $('export-location').textContent = ''; $('verify-export').hidden = true; $('confirm-reviewed').checked = false; $('include-original').checked = false;
+  clearSavedOutput(); $('confirm-reviewed').checked = false; $('include-original').checked = false;
 }
 function invalidateLibraryViews() {
   invalidateExport(); resetRedaction(); state.record = null; $('record-review').hidden = true; $('record-content').textContent = ''; $('record-name').textContent = '';
@@ -178,6 +187,7 @@ function update() {
   $('migration-export-panel').hidden = !library.complete || Boolean(library.verification_pending);
   $('include-original').disabled = library.redactions > 0 || Boolean(library.expired || library.verification_pending);
   if (library.redactions > 0) $('include-original').checked = false;
+  describeNextExport();
   $('step-select').classList.toggle('active', false);
   $('step-process').classList.toggle('active', !library.complete);
   $('step-review').classList.toggle('active', library.complete && !state.output);
@@ -209,6 +219,10 @@ function renderProgress() {
   if (pending) {
     $('migration-phase').textContent = phase === 'paused' ? 'Paused while verifying; checkpoint retained. Findings are not verified. Resume or Refresh review explicitly to verify them.' : phase === 'error' ? 'Stopped during verification. Findings remain unverified; Resume or Refresh review explicitly to verify the saved library.' : 'Verifying the saved library. Findings are not verified yet; record review will be available after verification.';
     $('progress').hidden = phase === 'paused' || phase === 'error'; $('progress').removeAttribute('value'); return;
+  }
+  if(library.expired===true) {
+    $('migration-phase').textContent='Expired library: read-only review remains available. Processing, redaction and export are blocked; original files remain local.';
+    $('progress').hidden=true; $('progress').removeAttribute('value'); return;
   }
   $('migration-phase').textContent = `${phaseText}${percentage === null ? finished ? ' · review findings before sharing' : ' · percentage unavailable until enough totals are known' : ` · ${percentage.toFixed(1)}%`}${progress?.batch_number ? ` · batch ${progress.batch_number}` : ''}`;
   $('migration-phase').textContent += ` · ${findings.record_omissions} record omissions · ${findings.missing_source_fields} missing source fields · ${findings.intentional_redactions} intentional redactions · ${findings.reference_notices} reference notices`;
@@ -364,16 +378,46 @@ $('redact-record').addEventListener('click', () => {
   await review(); status('Redacted copy saved with an omission record. The original export remains in this local library. Review the new record before sharing.');
 });
 });
+$('include-original').addEventListener('change',()=>{if(!state.busy)describeNextExport();});
 $('export-migration').addEventListener('click', () => perform('Choose a new folder for reviewed portable files…', async () => {
   if (!$('confirm-reviewed').checked) throw new Error('Review the records and omissions, then confirm before exporting.');
-  const output = await api.choose('export-output'); if (!output) return status('Export cancelled.');
-  await api.run('migration-export', {workspace: state.workspace.handle, checkpoint: state.library.checkpoint, target: $('migration-target').value, output: output.handle, confirmed: true, includeOriginal: $('include-original').checked});
-  state.output = output; $('export-location').textContent = output.label; $('verify-export').hidden = false;
-  status('Portable reference library saved locally. Nothing was uploaded. Select reviewed documents in your destination assistant; this does not populate its native history.');
+  let output;
+  try {output=await api.choose('export-output');}
+  catch {
+    clearSavedOutput('No export location confirmed.');
+    throw new Error('The export destination could not be confirmed. No new export was started and no earlier copy is selected for verification. Choose a new destination; existing files and folders are never overwritten.');
+  }
+  if (!output) return status(state.output?'Export cancelled. The earlier saved copy is still selected for verification.':'Export cancelled. No new saved copy is selected.');
+  clearSavedOutput(output.label);
+  const expected={migrationId:state.library.migration_id,checkpoint:state.library.checkpoint,records:state.library.normalized_records,includeOriginal:$('include-original').checked};
+  try {
+    if(typeof expected.migrationId!=='string' || !expected.migrationId || !/^[a-f0-9]{64}$/.test(expected.checkpoint) || !Number.isSafeInteger(expected.records) || expected.records<0 || expected.records>50000) throw new Error('Refresh review to obtain the saved library identity, checkpoint and record count.');
+    const result=await api.run('migration-export', {workspace: state.workspace.handle, checkpoint:expected.checkpoint, target: $('migration-target').value, output: output.handle, confirmed: true, includeOriginal:expected.includeOriginal});
+    if(result.output_created!==true || result.checkpoint!==expected.checkpoint || result.records!==expected.records) throw new Error('The export result does not match the reviewed checkpoint and record count.');
+    state.output={...output,...expected,verifiedFiles:expected.records*2+(expected.includeOriginal?1:0)};
+    $('verify-export').hidden=false;
+    status(expected.records===0 ? expected.includeOriginal ? 'Original selected export and migration metadata saved locally; no parsed conversation references were exported. Review the original before sharing. Nothing was uploaded.' : 'Migration metadata saved locally only. This folder contains no conversations, reference documents or original export. Nothing was uploaded.' : `${expected.records} reviewed records saved as portable files locally. Nothing was uploaded. Review the saved references before sharing; this does not populate native history.`);
+  } catch(error) {
+    clearSavedOutput('Unverified attempted output: '+output.label);
+    const detail=String(error.message || '').replace(/^Error invoking remote method 'run-engine': Error:\s*/, '').replace(/^error:\s*/, '');
+    const reason=/^migration expired; create a fresh reviewed plan$/.test(detail)?'Full Migration retention has expired. Review remains available; use a fresh authorized plan for any further processing or export.':/^(?:Stopped\.|The process did not pause within five seconds and was stopped\.)/.test(detail)?'Export was stopped or cancelled; inspect the attempted location and choose a fresh destination before retrying.':/^(?:\[Errno 17\] File exists|\[WinError 183\] Cannot create a file when that file already exists)/.test(detail)?'The destination already exists; choose a new location.':/^(?:stale checkpoint; review before export|The export result does not match the reviewed checkpoint and record count\.)$/.test(detail)?'The reviewed checkpoint changed or could not be confirmed.':/^source snapshot (?:digest|size) mismatch$/.test(detail)?'Local library integrity checks failed.':'The export could not be confirmed against the reviewed library.';
+    throw new Error(`${reason} The attempted output may be absent or incomplete; inspect its location below before retrying. No earlier copy is selected for verification. Refresh library review if its checkpoint changed.`);
+  }
 }));
-$('verify-export').addEventListener('click', () => perform('Verifying saved portable file hashes…', async () => {
-  const result = await api.run('migration-verify', {output: state.output.handle}); status(`${result.verified_files} portable files verified. Hashes detect changes; they do not prove author identity.`);
-}));
+$('verify-export').addEventListener('click', () => {
+  if(!state.output || state.busy)return;
+  return perform('Verifying this saved copy against its reviewed library…', async () => {
+    const saved=state.output;
+    try {
+      const result=await api.run('migration-verify',{output:saved.handle});
+      if(result.migration_id!==saved.migrationId || result.checkpoint!==saved.checkpoint || result.verified_files!==saved.verifiedFiles) throw new Error('Folder identity, checkpoint or content-file count changed from this saved copy.');
+      status(saved.records===0 ? saved.includeOriginal ? '1 original-export file hash verified; no parsed conversation references are present. Hashes detect changes; they do not prove author identity or authenticate metadata.' : 'This metadata-only folder has no content-file hashes to check and contains no conversations, reference documents or original export. Metadata is not authenticated.' : `${result.verified_files} portable files verified. The library identity, checkpoint and content-file count match this saved copy; hashes detect changes, not author identity.`);
+    } catch(error) {
+      clearSavedOutput('Unverified affected folder: '+saved.label);
+      throw new Error('This folder changed or could not be verified as the selected copy. Its identity, checkpoint and content-file count must all match the saved result. Review the affected location below, then save a new copy before verifying again. No files were deleted.');
+    }
+  });
+});
 $('new-migration').addEventListener('click', () => {
   if (state.busy) return;
   state.source = null; state.workspace = null; state.library = null; state.record = null; state.offset = 0; state.progress = null; state.paused = false; invalidateLibraryViews();

@@ -2,6 +2,7 @@
 
 ## Unreleased maintenance
 
+- Bind desktop portable-copy verification to the selected migration, checkpoint and expected content-file count. Clear an earlier selection after a failed new attempt, preserve it after a cancelled picker, and explain metadata-only exports and expired libraries explicitly.
 - Show complete saved Task Hand Off snapshots separately from the creation form, with paged read-only data, explicit review and digest-bound export. Existing CLI inspection and export defaults remain compatible; task expiry stays informational.
 - Add an unreleased Windows x64 desktop candidate with checked local NTFS operations and native Windows CI; signing and consumer installation remain unverified.
 - Add a guided field-redaction picker with bounded text previews and explicit application. Earlier record revisions, original exports and previously saved portable copies remain unchanged.
