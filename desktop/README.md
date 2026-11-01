@@ -16,9 +16,17 @@ The Mac app is **unsigned and not notarized**. Do not bypass OS security warning
 
 **Full Migration:** first download an official export from your current provider. Select that file in the app, choose its parser (or preserve-only mode), choose a new local library folder, and confirm the long-term move. Start processing once: the app runs bounded batches automatically. Review findings, redact selected fields, and save reviewed portable files. You can pause and resume an existing library.
 
+### Review screens in the unreleased candidate
+
+On [`feature/windows-desktop`](https://github.com/Huzaifa-Asif/cross-agent-handoff/tree/feature/windows-desktop), saving or opening a Task Hand Off shows a read-only snapshot of the saved file. Review the goal, context and preferences; expand **Review all saved fields, including code and provenance** for the complete paged data. Confirm review, then save a reference document. If the file changed, reopen and review it again. **Create or open another** returns to the separate creation form. Its unsaved draft is never used to export an opened file.
+
+The same candidate offers a guided Full Migration redaction picker. Choose a field, inspect the selection, then apply; selecting alone does not change data. Original exports, earlier revisions and previously saved portable copies remain unchanged. Review and save a new portable copy after redaction. This is not secure deletion or automatic secret scanning. Task Hand Off expiry stays informational; the candidate enforces configured Full Migration expiry before redaction as well as processing/export.
+
+These candidate screens and fixes have not replaced the published v1.0.0 download.
+
 Your files stay local. Full Migration preserves the selected export and available parsed context; it cannot establish that the provider supplied your entire account state. Reference files do not recreate native history, settings or hidden memory. Gemini separately supports importing certain original provider archives; this generated portable library is not that format.
 
-Expiry blocks further processing/export but does not delete originals. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
+Full Migration expiry blocks further processing/export but does not delete originals. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
 
 ## Develop or build
 
@@ -71,4 +79,4 @@ Before claiming native Windows support, run the suite on Windows and inspect the
 
 References: [Electron Packager targets](https://electron.github.io/packager/main/), [packager options](https://electron.github.io/packager/main/interfaces/Options.html), [Python Windows launcher/manager](https://docs.python.org/3/using/windows.html).
 
-Candidate validation: [Windows CI on commit d009d68](https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/runs/41339432706) passed native Python 3.11/3.13 file-safety, task, migration, redaction, pause/resume and retry tests, plus packaged startup and a 1,250-conversation / 2,500-file journey on Windows Server 2025. File selection in that GUI check uses documented synthetic dialog stubs. This does not establish consumer Windows 10/11 coverage, real OS file-picker interaction, signing, SmartScreen or installation behavior. No Windows release has been published.
+Candidate validation: [Windows CI on commit 3d28ac5](https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/runs/41349531913) passed native Python 3.11/3.13 file-safety, task, migration, redaction, pause/resume and retry tests, plus packaged saved-task review for both schemas, changed-file export rejection/reopening, and a 1,250-conversation / 2,500-file migration journey with redaction and a verified new portable copy on Windows Server 2025. File selection in that GUI check uses documented synthetic dialog stubs. This does not establish consumer Windows 10/11 coverage, real OS file-picker interaction, signing, SmartScreen or installation behavior. No Windows release has been published.
