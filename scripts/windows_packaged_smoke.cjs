@@ -301,7 +301,10 @@ async function main() {
     await choose(expiryB);await page.locator('#export-migration').click();
     await page.locator('#cancel-operation').waitFor({state:'hidden'});
     assert.equal(await page.locator('#status-box').evaluate(element=>element.classList.contains('error')),true);
-    assert.match(await page.locator('#status-message').innerText(),/retention has expired/i);
+    const retentionMessage=await page.locator('#status-message').innerText();
+    assert.match(retentionMessage,/retention has expired/i);
+    assert.match(retentionMessage,/destination may be absent or incomplete/i);
+    assert.doesNotMatch(retentionMessage,/location below|before retrying|checkpoint changed/i);
     const expiredPhase=await page.locator('#migration-phase').innerText();
     assert.match(expiredPhase,/expired.*read.only/i);assert.doesNotMatch(expiredPhase,/resume|100(?:\.0)?%/i);
     assert.equal(await page.locator('#progress').isHidden(),true);

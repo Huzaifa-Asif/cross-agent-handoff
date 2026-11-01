@@ -234,7 +234,10 @@ test('expiry after active review and A export rejects selected B without changin
   await new Promise(resolve=>setTimeout(resolve, Math.max(0, deadline.getTime()-Date.now()+30)));
   assert.equal(cli(['migrate','review','--workspace',libraries.A.workspace]).expired, true);
   await h.export(b); assertCleared(h, a.label);
-  assert.match(h.nodes.get('status-message').textContent, /expir/i);
+  const expiredMessage = h.nodes.get('status-message').textContent;
+  assert.match(expiredMessage, /expir/i);
+  assert.match(expiredMessage, /absent or incomplete/i);
+  assert.doesNotMatch(expiredMessage, /below|retry|refresh.*checkpoint/i);
   // This trusted backend error is new expiry knowledge; no Refresh is needed
   // before the displayed phase and available mutations become read-only.
   const expiredPhase = h.nodes.get('migration-phase').textContent;
@@ -271,6 +274,68 @@ test('expiry after active review and A export rejects selected B without changin
     assert.match(pending.nodes.get('migration-phase').textContent, /verifying|not verified/i);
     assert.doesNotMatch(pending.nodes.get('migration-phase').textContent, /100(?:\.0)?%/);
   });
+});
+
+test('expiry after a record write can leave partial output; the UI must retain that uncertainty', {skip:!python}, async t=>{
+  const {libraries, output, h} = fixture(t, ['A'], false, new Date(Date.now()+3600000).toISOString());
+  await h.open(); const a = output('earlier-valid-A'), b = output('partial-expiry-B'); await h.export(a);
+  // Advance a controlled backend clock only after an actual record publication.
+  // The ordinary retention guard and all file writes remain real and unchanged.
+  const probe = String.raw`
+import hashlib, json, sys
+from datetime import timedelta
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import migration as m
+workspace, digest, output = Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4])
+before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in workspace.iterdir()}
+state = json.loads((workspace / 'checkpoint.json').read_bytes())['data']
+deadline = m.h.timestamp(state['expires_at'])
+clock = [deadline - timedelta(seconds=1)]
+class Clock:
+    @staticmethod
+    def now(tz=None):
+        return clock[0] if tz is not None else clock[0].replace(tzinfo=None)
+write = m.Store.write
+published = []
+def write_then_expire(self, name, raw, *args, **kwargs):
+    result = write(self, name, raw, *args, **kwargs)
+    if name.startswith('record-') and name.endswith('.json'):
+        published.append(name)
+        clock[0] = deadline + timedelta(seconds=1)
+    return result
+with patch.object(m, 'datetime', Clock), patch.object(m.Store, 'write', write_then_expire):
+    try:
+        m.export(workspace, digest, output, 'generic')
+    except m.RetentionExpired as exc:
+        error = str(exc)
+    else:
+        raise AssertionError('Export unexpectedly completed after retention expiry')
+after = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in workspace.iterdir()}
+assert before == after and len(published) == 1
+files = sorted(p.name for p in output.iterdir())
+assert output.is_dir() and len(files) == 2 and not (output / 'manifest.json').exists()
+print(json.dumps({'error': error, 'partial_files': files, 'workspace_unchanged': before == after}))
+`;
+  const priorRun = h.api.run; let partial;
+  h.api.run = async(action, input)=>{
+    if (action !== 'migration-export') return priorRun(action, input);
+    const result = spawnSync(python, ['-X','utf8','-E','-s','-B','-c',probe,
+      path.dirname(engine), libraries.A.workspace, libraries.A.review.checkpoint, input.output],
+      {encoding:'utf8', timeout:30000, maxBuffer:1048576});
+    assert.equal(result.status, 0, result.stderr); partial = JSON.parse(result.stdout);
+    throw new Error('error: '+partial.error);
+  };
+  await h.export(b); assertCleared(h, a.label);
+  assert.equal(partial.error, 'migration expired; create a fresh reviewed plan');
+  assert.equal(partial.workspace_unchanged, true);
+  assert.equal(partial.partial_files.length, 2);
+  assert.equal(fs.existsSync(path.join(a.handle, 'manifest.json')), true);
+  const message = h.nodes.get('status-message').textContent;
+  assert.match(message, /retention has expired/i); assert.match(message, /absent or incomplete/i);
+  assert.doesNotMatch(message, /below|retry|refresh.*checkpoint|no new portable copy was created/i);
+  assert.equal(h.nodes.get('migration-export-panel').hidden, true);
 });
 
 test('each expected provenance field is required, including missing verification metadata', async t=>{
