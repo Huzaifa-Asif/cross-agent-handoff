@@ -1,0 +1,27 @@
+{
+  "name": "cross-agent-handoff-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline desktop workflows for task handoffs and deliberate history migration.",
+  "main": "main.cjs",
+  "license": "MIT",
+  "scripts": {
+    "start": "node start.cjs",
+    "test": "node --test test/*.test.cjs",
+    "check": "node --check main.cjs && node --check preload.cjs && node --check renderer.js && node --check contracts.cjs && node --check build.cjs && node --check start.cjs && node --check runner.cjs && node --check progress.cjs",
+    "build:mac": "node build.cjs",
+    "setup:electron": "install-electron"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "45.2.1",
+    "@electron/get": "5.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "overrides": {
+    "glob": "14.0.3",
+    "minimatch": "11.0.3"
+  }
+}

@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 dist/
+node_modules/
+desktop/.stage/
+*.tgz

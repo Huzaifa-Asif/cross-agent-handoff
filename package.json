@@ -1,0 +1,48 @@
+{
+  "name": "@huzaifa-asif/cross-agent-handoff",
+  "version": "1.0.0",
+  "description": "Local task handoffs and deliberate, reviewable migration of selected AI conversation exports. Requires Python 3.11+.",
+  "license": "MIT",
+  "author": "Huzaifa Asif",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Huzaifa-Asif/cross-agent-handoff.git"
+  },
+  "homepage": "https://github.com/Huzaifa-Asif/cross-agent-handoff#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "handoff": "bin/handoff.cjs",
+    "cross-agent-handoff": "bin/handoff.cjs"
+  },
+  "files": [
+    "bin/handoff.cjs",
+    "handoff.py",
+    "handoff_mcp.py",
+    "migration.py",
+    "examples/",
+    "docs/",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "desktop/README.md",
+    "CONTRIBUTING.md",
+    "CHECKPOINT.md"
+  ],
+  "scripts": {
+    "test": "node --test tests/npm-wrapper.test.cjs",
+    "check": "node --check bin/handoff.cjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "keywords": [
+    "handoff",
+    "migration",
+    "ai",
+    "local-first",
+    "conversation-export"
+  ]
+}

@@ -1,26 +1,25 @@
-# Cross-Agent Handoff 0.4.1 verification checkpoint
+# Cross-Agent Handoff 1.0.0 verification checkpoint
 
-Checked 2026-10-31. This patch adds the Claude marketplace description to the source generator and synchronizes package versions. Handoff behavior and schema are unchanged.
+Checked 2026-11-01. This major release adds deliberate migration, business-friendly task schema 2.0, a useful Node/npm launcher and a guided Electron desktop app sharing the local Python engine. Existing schema 1.0 task/CLI/manual-envelope compatibility remains covered.
 
-## Patch verification
+## Executed engine and CLI checks
 
-- 43 unit/integration/CLI/package test methods passed on macOS Python 3.14.7, including a regression for the generated Claude marketplace description and host manifest/archive version consistency.
-- Claude Code 2.1.220 strict native validation passed for the generated plugin and marketplace. This fixes the missing-description warning found in v0.4.0.
-- Deterministic source/plugin rebuilds, generated marketplace parity, syntax/whitespace checks and compileall passed. No external vulnerability-audit or static type-check claim.
-- Codex CLI 0.165.0 and Claude Code 2.1.220 installed/listed v0.4.0 in disposable configuration directories. Claude inventory found the skill and MCP server; direct cached-runtime protocol discovery and synthetic validation passed. Test installations were removed. This is historical v0.4.0 evidence, not a v0.4.1 desktop/model workflow claim.
+- 72 Python unit/integration/CLI/package test methods passed locally on macOS Python 3.14.7. Coverage includes business/developer journeys, round trips, malformed inputs, archive safety, resource bounds, redaction, retention, checkpoint conflicts and resumed collection processing.
+- Independent engine and launcher review reran the suite and adversarial probes. SIGINT/SIGTERM pause/restart, automatic bounded batching, durable progress counters, unknown totals and partial/error progress, changed source/conflicts and final content fidelity were checked. Findings on alias/attachment reporting, physical-line provenance, nonfinite JSON, fatal output conflicts, aggregate manifest limits, profile preference duplication and incomplete-plan cleanup were fixed and independently verified. No unresolved release-blocking findings in that engine review snapshot.
+- A 41,208,891-byte synthetic JSON export (2,500 conversations) processed in four resumable batches with no opaque units. Paged review and local search passed; observed peak process RSS about 33 MB on this Mac. This is a synthetic workload, not an unlimited-scale guarantee.
+- Four Node wrapper tests passed, including actual launcher signal forwarding and automatic resume. Independent SIGINT and SIGTERM tests returned paused exit 130 with durable JSON, then resumed with exact IDs/text and no duplicates. The local npm tarball installed and ran through offline npm/npx with installation scripts disabled. Node 24.18.1/npm 11.16.0 were used locally. The launcher requires installed Python 3.11+; no runtime download or install hook exists.
+- Pyright 1.1.414 basic checking of the three Python engine modules: zero errors. compileall, JavaScript syntax checks and dependency-free whitespace/syntax policy checks passed. Full strict typing or external engine vulnerability certification is not claimed.
 
-## Published baseline
+## Distribution status
 
-v0.4.0 source commit `a254a6f380f26d975b0c15fb068f6e2abe32a067` is public at https://github.com/Huzaifa-Asif/cross-agent-handoff. All six exact-commit CI jobs passed on Ubuntu/macOS with Python 3.11, 3.12 and 3.13: https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/runs/41227918671. The v0.4.0 tag and assets remain unchanged. Consult the v0.4.1 release and its exact-commit Actions run for patch publication evidence; this source checkpoint does not pre-claim future CI.
+Version 1.0.0 is the first intended scoped npm publication. The current npm identity check returned E401. The unscoped name belongs to another publisher; the proposed `@huzaifa-asif/cross-agent-handoff` name has no verified public package or authenticated scope ownership. No npm publication is claimed. A release tarball remains installable locally with scripts disabled.
 
-## Earlier checks
+Source, deterministic host plugin archives, generated marketplace and the npm tarball are separate artifacts. The macOS desktop application is a real Electron app requiring installed Python, unsigned and not notarized; other native platforms are unverified. Sixteen desktop tests and JavaScript syntax checks passed on Electron 45.2.1. Independent desktop review findings on stale export/search/unredacted views, accessibility semantics and inherited raw-source opt-in were fixed and regression-tested. The actual packaged macOS arm64 app was launched and inspected with screenshots: synthetic business task save/export, cancelled save dialog, migration opt-in, two-conversation parsing, inert previews, keyboard redaction, local search, restart/resume, reviewed export and four-file verification passed. Bundled engine/UI bytes match source, and Electron/Chromium license notices are retained. The final unsigned ZIP SHA-256 is `a95878b810c12f22ea5802bbf175094c24e0ba3cf9687f7cfcc9a940d6caab8d`. Desktop build dependency audit reported zero advisories; that is not a runtime security certification. The final native automatic workload processed 6,000 conversations / 49,644,001 bytes from one click with exact ID/role/timestamp/text fidelity. Live counts remained unknown until established; 100% appeared only on completion. Esc pause, close-while-busy, restart from a 1,000-record prefix and one-click automatic resume to 6,000 passed. Final packaged engine/UI bytes match source. Formal accessibility audit, signing/notarization and other platforms remain unverified.
 
-The v0.4.0 checkpoint records Linux Python 3.12/3.13 tests, independent malformed-input and round-trip probes, official MCP SDK protocol checks, portable schema checks and isolated Codex CLI 0.166.0-alpha.1 package installation.
+Consult the version's GitHub release and exact-commit Actions run for remote source/artifact/CI evidence. This source file does not pre-claim later remote CI. Older v0.4.0/v0.4.1 tags and assets are preserved.
 
-## Remaining gaps
+## Limits and pending external gates
 
-Cursor 3.20.21 is installed, but native plugin loading is untested. All desktop clean-install and model-driven workflows remain unrun. Windows is unsupported by the manual CLI safe-I/O contract. No official directory submission, eligibility, review or listing is established. Claude and Cursor submission portals require sign-in; OpenAI desktop-only submissions require approved-partner eligibility, organization allowlisting and identity verification. Host data handling and model obedience are outside the local server's guarantees.
+Only explicitly selected exported files are covered. Provider account completeness and hidden memory are unknown. Consumer export schemas are version-dependent; unknown/opaque members stay in the original local snapshot and are reported. Generated libraries are reference/portable data, not vendor-native history import. Gemini's native importer is a separate official route for eligible original provider archives.
 
-## Distribution
-
-Build source and plugins with the documented scripts. Use the generated marketplace on the separate distribution branch for host installation; the main branch is source build input. See docs/platform-plugins.md for installation and separate directory publication requirements. Use synthetic fixtures for validation.
+No personal history was accessed or migrated for testing. No vendor model/API call, new credential, agreement, paid resource or persistent plugin installation was used. npm authentication/scope ownership, official directory sign-ins, Cursor native plugin installation approval, OpenAI partner allowlisting/identity gates, desktop signing/notarization and other-platform testing remain separate unresolved external steps where applicable.

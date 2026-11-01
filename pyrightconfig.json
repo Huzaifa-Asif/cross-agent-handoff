@@ -1,0 +1,9 @@
+{
+  "include": [
+    "handoff.py",
+    "handoff_mcp.py",
+    "migration.py"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic"
+}

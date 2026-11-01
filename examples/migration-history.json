@@ -1,0 +1,42 @@
+{
+  "conversations": [
+    {
+      "id": "launch",
+      "title": "Marketing launch",
+      "created_at": "2026-10-20T10:00:00Z",
+      "preferences": {
+        "tone": "plain English"
+      },
+      "messages": [
+        {
+          "id": "m1",
+          "role": "user",
+          "timestamp": "2026-10-20T10:00:00Z",
+          "text": "Draft a launch checklist. Budget is pending."
+        },
+        {
+          "id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-10-20T10:01:00Z",
+          "text": "Confirm budget, owner and approval date."
+        }
+      ]
+    },
+    {
+      "id": "operations",
+      "title": "Operations handover",
+      "messages": [
+        {
+          "role": "user",
+          "text": "The inventory report arrives every Monday. Ask before contacting suppliers."
+        }
+      ],
+      "context": {
+        "owner": "Synthetic operations team"
+      }
+    }
+  ],
+  "preferences": {
+    "language": "English"
+  }
+}

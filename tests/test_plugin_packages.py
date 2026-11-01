@@ -91,6 +91,10 @@ class PackageTests(unittest.TestCase):
                 self.assertFalse(list(out.rglob('__pycache__')))
 
     def test_release_metadata_and_claude_marketplace_description(self):
+        import handoff_mcp
+        self.assertEqual(json.loads((ROOT / 'package.json').read_text())['version'], builder.VERSION)
+        self.assertEqual(json.loads((ROOT / 'desktop/package.json').read_text())['version'], builder.VERSION)
+        self.assertEqual(handoff_mcp.VERSION, builder.VERSION)
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp) / 'marketplace'
             results = builder.build(out)

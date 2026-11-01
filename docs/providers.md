@@ -1,6 +1,6 @@
 # Cross-Agent Handoff: provider interface research
 
-Verified against official documentation on 2026-10-29. Documentation describes available interfaces, not a guarantee about the user's installed version, subscription, or settings. No accounts, credentials, vendor sessions, or private histories were accessed. No live integration was tested.
+Historical task-handoff interface research checked 2026-10-29. For current whole-tool export/migration coverage, including Gemini native import and its limits, use [migration provider coverage](migration.md#provider-coverage). Documentation describes available interfaces, not a guarantee about the user's installed version, subscription, or settings. No accounts, credentials, vendor sessions, or private histories were accessed. No live integration was tested.
 
 ## Recommended product boundary
 

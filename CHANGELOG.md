@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0 — 2026-11-01
+
+- Separate focused task handoffs from deliberate, local long-term migration of explicitly selected history exports.
+- Automatically process bounded migration batches with streamed phase/count progress, unknown totals shown honestly and graceful pause/resume.
+- Add streamed multi-conversation libraries, original-export snapshots, provenance/omission reports, resumable checkpoints, local search, record review, redaction, retention and verified portable export.
+- Add business-friendly task schema 2.0 and examples with optional repository/code fields; retain schema 1.0 and original manual envelope/CLI compatibility.
+- Add a useful npm/npx launcher with explicit Node/Python prerequisites and no installation hooks. This is the first intended scoped npm publication, not an update to the unrelated unscoped package; registry publication may remain blocked by authentication.
+- Add a guided local desktop app sharing the Python engine. macOS unsigned packaging and native testing are distinct from signing/notarization or other platform support.
+- Native provider restore is not claimed; vendor export formats remain version-dependent and opaque data is explicitly reported/preserved.
+
 ## 0.4.1 — 2026-10-31
 
 - Add the Claude marketplace description in the source generator so strict native validation passes without warnings.

@@ -10,10 +10,11 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 HOSTS = ('codex', 'claude', 'cursor')
-VERSION = '0.4.1'
-COMMON = ('handoff.py', 'handoff_mcp.py', 'LICENSE', 'SECURITY.md',
-          'examples/example.json', 'docs/schema-v1.json', 'docs/platform-plugins.md',
-          'docs/privacy.md')
+VERSION = '1.0.0'
+COMMON = ('handoff.py', 'handoff_mcp.py', 'migration.py', 'LICENSE', 'SECURITY.md',
+          'examples/example.json', 'examples/business-task.json', 'examples/migration-history.json',
+          'docs/schema-v1.json', 'docs/platform-plugins.md',
+          'docs/privacy.md', 'docs/migration.md', 'docs/schema-v2.json')
 
 
 def add_zip(path, files):
