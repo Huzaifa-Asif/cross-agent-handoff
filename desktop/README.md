@@ -2,30 +2,38 @@
 
 A real Electron desktop app for focused task handoffs and deliberate local migration of selected history exports. It uses the same Python engine as the CLI. There is no AI account sign-in in this app: request an export on your provider's website, then select that downloaded file here.
 
-## Prerequisites
+## Get started on Mac
 
-- macOS with an installed Python 3.11+ interpreter at `/opt/homebrew/bin/python3`, `/usr/local/bin/python3`, or `/usr/bin/python3`. Install Python yourself from its official source; the app never downloads it. The POSIX safe-file engine does not support Windows in this release.
-- For development/builds: Node 22.12+ and npm. `npm ci` installs the pinned official Electron build tools. Run `npm run setup:electron` explicitly to download the official development runtime before `npm start`; the start script refuses to download it automatically. The explicit packaging command also obtains the pinned Electron binary for its build.
+1. Download the macOS ZIP from the project's [GitHub releases](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases), extract it, and open **Cross-Agent Handoff.app**. Use the build matching your Mac's processor; the published build is for Apple silicon.
+2. Python 3.11 or newer must already be installed. The app checks `/opt/homebrew/bin/python3`, `/usr/local/bin/python3` and `/usr/bin/python3`. If none is suitable, install Python from [python.org](https://www.python.org/downloads/macos/), then reopen the app. Node and npm are unnecessary for the packaged app.
+3. In the new candidate, choose **Task Hand Off** to move one task, or **Full Migration** for a deliberate long-term move of your selected exported history. The currently published v1.0 app uses the older labels **One task** and **Move my library**, respectively; the new labels are not yet published.
+
+The Mac app is **unsigned and not notarized**. Do not bypass OS security warnings. The app does not download Python or sign into your AI accounts. Windows is currently an **unreleased candidate**; its requirements and testing limits are below.
+
+## Choose your mode
+
+**Task Hand Off:** describe your goal, context and preferences. Save a handoff, then save a reference document for your next assistant. Review it and explicitly attach or paste it into that assistant. No repository or code is required.
+
+**Full Migration:** first download an official export from your current provider. Select that file in the app, choose its parser (or preserve-only mode), choose a new local library folder, and confirm the long-term move. Start processing once: the app runs bounded batches automatically. Review findings, redact selected fields, and save reviewed portable files. You can pause and resume an existing library.
+
+Your files stay local. Full Migration preserves the selected export and available parsed context; it cannot establish that the provider supplied your entire account state. Reference files do not recreate native history, settings or hidden memory. Gemini separately supports importing certain original provider archives; this generated portable library is not that format.
+
+Expiry blocks further processing/export but does not delete originals. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
+
+## Develop or build
+
+Building requires Node 22.12+, npm and Python 3.11+. Run from this repository:
 
 ```sh
 cd desktop
-npm ci
-npm test
+npm ci --ignore-scripts
 npm run check
+npm test
 npm run setup:electron
 npm start
-npm run build:mac
 ```
 
-The macOS build is written outside the source tree, in `../desktop-artifacts` relative to the repository's parent directory. It is **unsigned and not notarized**, not an App Store release. Do not bypass OS security warnings. Python remains an explicit external prerequisite. Other native platforms and signing/notarization are not claimed.
-
-## Workflows
-
-**One task:** write a goal, context and preferences, save a JSON handoff, then save a reviewed reference document for your chosen assistant. Repositories and code are optional.
-
-**Move my library:** select an exported file, choose its documented parser or preserve-only mode, select a new local folder, confirm a deliberate long-term move, start automatic processing of bounded batches until completion, inspect records and omissions, redact explicit fields and save reviewed portable files. Resume an existing library with its checkpoint. Expiry blocks processing/export but does not delete originals. Redaction does not remove the original snapshot. Portable exports exclude original source bytes by default. An explicit unchecked option can include the full selected source archive, with a sensitive-content warning; the engine refuses this option after any redaction.
-
-Files are never sent to an AI service. Reference files do not recreate native history, settings or hidden memory. Gemini has a separate provider-supported history import for certain original archives; the generated portable library is not that format. Consult the root provider/migration documentation for exact coverage and limits.
+`setup:electron` explicitly downloads the pinned official development runtime; `npm start` never downloads it. To package, run `npm run build:mac` on macOS or `npm run build:windows` for the Windows candidate. Packaging explicitly obtains the pinned official Electron binary. Set `HANDOFF_DESKTOP_OUTPUT` to a new output directory to preserve earlier artifacts; the default is the task's sibling `desktop-artifacts` directory outside the source tree.
 
 ## Security model
 
@@ -34,3 +42,27 @@ Only packaged local assets load, under a dedicated custom protocol and an epheme
 The GUI paginates 100 record summaries at a time, provides local text search with up to 20 previews, and displays up to 256 KiB of a selected record with a visible limit. Use the CLI to inspect a longer record before sharing. Pause (or Esc while processing) requests a graceful checkpoint from the local engine. The app waits up to five seconds before stopping only its own unresponsive child process. Closing the app also waits for this pause/stop sequence. Resume continues automatically from the verified checkpoint; known counts and unknown totals are distinguished, and omitted/error results never show a false 100%. Cancelling an initial snapshot can leave an incomplete folder; choose a fresh destination rather than overwriting it.
 
 Developer tests use synthetic fixtures and no model/API calls. These checks do not prove another provider will obey its own trust boundaries. Packaged UI tests and actual platform evidence are recorded in release evidence rather than assumed from a successful build.
+
+
+## Windows portable candidate
+
+The same app and shared engine can be packaged for Windows x64 using Node 22.12+ and an explicitly installed Python 3.11+:
+
+```sh
+npm ci --ignore-scripts
+npm run check
+npm test
+npm run build:windows
+```
+
+`build:windows` explicitly selects `win32` / `x64`, including on a Mac build host. Set `HANDOFF_DESKTOP_OUTPUT` to a new directory to preserve existing artifacts. Extract the full generated `cross-agent-handoff-<version>-windows-x64-unsigned.zip`, then open `Cross-Agent Handoff.exe`; retain resources, DLLs and license notices beside it. This is an **unreleased, unsigned portable candidate**, not an installer or a natively verified Windows release. Do not bypass OS security warnings.
+
+On Windows, install 64-bit Python 3.11+ yourself from [python.org](https://www.python.org/downloads/). Discovery checks `py -3.11`, `py -3`, then real `python`/`python3` executables on PATH. It requires the shared engine capability probe, pins the discovered interpreter, skips Store `python` aliases and disables Python manager automatic installation. No runtime is silently downloaded. The Windows backend targets Windows 10 1809 or newer and requires a supported local fixed NTFS volume; network/removable paths and reparse points fail closed.
+
+Windows Pause sends only the constant `pause` line over the engine child's private stdin, enabled by `HANDOFF_CANCEL_STDIN=1`. The engine saves a checkpoint and returns exit130. Windows SIGTERM is not used for graceful pause. After five seconds an unresponsive own child may be stopped; reopen the library to verify its latest durable checkpoint. No cancellation file or provider connection is created. Mac signal behavior is unchanged.
+
+The pinned Electron Packager uses JavaScript `resedit` for metadata: no Wine, installer toolchain, signing credential or new account is needed. Both builds retain Electron/Chromium notices. Windows engine resources are at `resources/app`; Mac resources are at `.app/Contents/Resources/app`.
+
+Before claiming native Windows support, run the suite on Windows and inspect the actual packaged executable: task save/open/export; selected-file migration; progress; early pause; relaunch/resume; redaction; existing output rejection; malformed imports; and rejection of unsupported network/removable/reparse locations. Mac cross-builds and simulated Windows control tests do not establish native behavior.
+
+References: [Electron Packager targets](https://electron.github.io/packager/main/), [packager options](https://electron.github.io/packager/main/interfaces/Options.html), [Python Windows launcher/manager](https://docs.python.org/3/using/windows.html).

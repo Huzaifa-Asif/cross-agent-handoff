@@ -8,9 +8,10 @@
   "scripts": {
     "start": "node start.cjs",
     "test": "node --test test/*.test.cjs",
-    "check": "node --check main.cjs && node --check preload.cjs && node --check renderer.js && node --check contracts.cjs && node --check build.cjs && node --check start.cjs && node --check runner.cjs && node --check progress.cjs",
+    "check": "node --check main.cjs && node --check preload.cjs && node --check renderer.js && node --check contracts.cjs && node --check build.cjs && node --check start.cjs && node --check runner.cjs && node --check progress.cjs && node --check runtime.cjs",
     "build:mac": "node build.cjs",
-    "setup:electron": "install-electron"
+    "setup:electron": "install-electron",
+    "build:windows": "node build.cjs --platform win32 --arch x64"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

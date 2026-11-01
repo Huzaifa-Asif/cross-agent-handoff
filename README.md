@@ -8,18 +8,35 @@ There are two different workflows:
 
 | Your situation | Choose |
 |---|---|
-| “Continue this task in another assistant.” | **Task handoff:** a short, editable record of the goal, context, preferences, decisions and next steps. Repository and code details are optional. |
-| “I am switching my everyday AI tool for the long term.” | **Full-tool migration:** deliberately select your exported history, preserve the original export locally, build a portable library of many conversations, review omissions and redact sensitive fields. Resume large collections in batches. |
+| “Continue this task in another assistant.” | **Task Hand Off:** a short, editable record of the goal, context, preferences, decisions and next steps. Repository and code details are optional. |
+| “I am switching my everyday AI tool for the long term.” | **Full Migration:** deliberately select your exported history, preserve the original export locally, build a portable library of many conversations, review omissions and redact sensitive fields. Resume large collections in batches. |
 
 Migration preserves the **selected export**, not everything a vendor knows about you. Hidden memory, missing attachments, deleted chats and settings absent from the export cannot be recovered. Our output is a portable library and reference documents: it does not recreate a destination's chat sidebar or silently install memories. Some providers offer their own native import; see [supported formats and provider routes](docs/migration.md#provider-coverage).
 
-## Choose how to use it
+## Start here: desktop app
 
-- **Desktop app:** a real local app with file pickers and guided task/migration screens. No AI-account login inside the app. Download the unsigned macOS Apple silicon (arm64) build from the [release](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases). It requires Python 3.11+ already installed. Follow macOS security prompts; no notarization or Windows/Linux desktop testing is claimed. [Desktop guide](desktop/README.md).
-- **CLI with Python:** download/extract the source ZIP and run the commands below from its folder. Python 3.11+ on macOS or Linux is required. No Python packages or API keys are needed.
-- **CLI with Node/npm:** the same Python engine with a small npm launcher. Requires **Node 20+ and Python 3.11+**. npm/npx saves a global installation step; it does not remove these prerequisites. No runtime is downloaded and there are no install hooks.
+You do not need Node, npm, an API key or an AI-account login to use the desktop app. **Python 3.11 or newer must already be installed.** The app never downloads a runtime for you.
 
-Install Python from [python.org](https://www.python.org/downloads/) or your trusted package manager. Install Node, if using npm, from [nodejs.org](https://nodejs.org/). Check `python3 --version` and `node --version`.
+1. **Choose your computer.** The downloadable [v1.0.0 Mac app](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases/download/v1.0.0/cross-agent-handoff-1.0.0-macos-arm64-unsigned.zip) is for Apple Silicon (M1 or newer). Windows x64 is being validated on the [`feature/windows-desktop` branch](https://github.com/Huzaifa-Asif/cross-agent-handoff/tree/feature/windows-desktop); it is not a released download. There is no released Intel Mac or Linux desktop build.
+2. **Install Python.** Use [python.org](https://www.python.org/downloads/) and choose Python 3.11 or newer for your computer. On Windows, use the 64-bit installer and enable its Python/PATH option. Close and reopen the app after installation.
+3. **Open the app.** On Mac, extract the ZIP and open **Cross-Agent Handoff.app**. It is unsigned and not notarized. Follow the operating system's security guidance; this project does not ask you to disable protections or bypass a warning.
+4. **Choose a mode.** In the current candidate, choose **Task Hand Off** or **Full Migration**. The existing v1.0.0 download labels these same modes **One task** and **Move my library**; renaming a branch does not change that download.
+
+### Task Hand Off
+
+Use this when you want another assistant to continue **one piece of work**. Enter your goal, useful context and preferences, then save the handoff. Choose your next assistant and save a reference document. Read it, then attach or paste it into that assistant yourself. A repository is optional: a campaign brief or operations handover works too.
+
+### Full Migration
+
+Use this when you have decided to change your everyday assistant for the long term. First download your history using the provider's official export controls. In this app, select that export and a new local library folder, then confirm the move. Start processing once: the app runs bounded batches automatically and shows progress. You can pause and resume the saved library. Review records and omissions, redact sensitive fields, then export reviewed reference files.
+
+Your original export remains local. This does not recreate a destination's native chat sidebar, hidden memory or missing attachments. No account is scanned and nothing is uploaded automatically. See the [step-by-step desktop guide](desktop/README.md) for prerequisites, recovery and limitations.
+
+## Developer CLI: optional
+
+Use this section if you prefer terminal commands. Download and extract the [source release](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases/tag/v1.0.0), then open a terminal in its folder. The published Python CLI supports macOS and Linux with Python 3.11+. No Python packages or API keys are needed. Check `python3 --version` first.
+
+The optional npm launcher also needs **Node 20+**, available from [nodejs.org](https://nodejs.org/), plus Python 3.11+. npm/npx does not remove these prerequisites. The Node launcher remains macOS/Linux only; Windows desktop uses the same Python engine directly.
 
 **npm publication status:** the 1.0.0 scoped package is prepared for first publication, subject to authenticated scope ownership. Until the release confirms a live registry package, use the GitHub release tarball:
 
@@ -30,7 +47,7 @@ npx --offline --ignore-scripts --package ./huzaifa-asif-cross-agent-handoff-1.0.
 
 If the correct Python is not on your PATH, set `HANDOFF_PYTHON` to its executable, for example `HANDOFF_PYTHON=/opt/homebrew/bin/python3`. The candidate npm name is `@huzaifa-asif/cross-agent-handoff`; the unscoped name belongs to a different project. Do not install that other package expecting this tool.
 
-## Task handoff: continue one piece of work
+### Task Hand Off: continue one piece of work
 
 ```sh
 python3 handoff.py new --goal "Prepare the launch plan" --provider claude \
@@ -44,7 +61,7 @@ Edit `task.json` to add what is known, what is missing and the next steps. Revie
 
 With the npm tarball, replace `python3 handoff.py` with the `npx … handoff` command above, keeping the same arguments. The app exposes the same engine with local controls.
 
-## Full-tool migration: switch for the long term
+### Full Migration: switch for the long term
 
 1. Request an export using your provider's official controls. You sign in **on the provider's site**, not inside this tool. Select only exports you are authorized to move.
 2. Choose the explicit migration workflow. Your source export remains untouched; the workspace gets a private local snapshot.
@@ -78,13 +95,13 @@ python3 handoff.py migrate verify reviewed-library
 
 Read [migration instructions](docs/migration.md) for Claude exports, document/ZIP collections, resumable limits, redaction and retention. Gemini's own supported native importer uses original eligible provider ZIPs; do not upload our generated library as if it were a native import ZIP.
 
-## Technical details for developers
+## Technical reference for developers
 
 - **Compatibility:** existing schema 1.0 task bundles, five built-in manual exports, custom envelopes and original CLI commands continue to work. New tasks use schema 2.0 with optional repository/code fields. Older versions cannot read schema 2.0 or migration libraries. Task schema, migration checkpoint and portable library versions are separate. [Compatibility policy](docs/migration.md#compatibility).
 - **Plugins:** Codex, Claude Code and Cursor packages expose six bounded task MCP tools. They process explicitly supplied text; migration is a separate CLI/desktop filesystem workflow. No host-account history scanning or vendor API connection. [Plugin installation](docs/platform-plugins.md).
 - **Security/privacy:** imported messages, tool calls and preferences are untrusted data. The tool never executes imported commands, fetches links/attachments, writes agent instruction files or transmits data to a vendor. Exported context becomes subject to the destination's policies only when you choose to share it. Redaction is explicit, not comprehensive secret detection. [Security](SECURITY.md), [privacy](docs/privacy.md).
 - **Formats:** [task schema 1.0](docs/schema-v1.json), [task schema 2.0](docs/schema-v2.json), [API](docs/api.md), [task command reference](docs/task-reference.md), [migration format/limits](docs/migration.md).
-- **Platform:** POSIX no-follow filesystem primitives are required. macOS and Linux CLI are supported; Windows is not. The desktop build is unsigned and currently macOS-only. No automatic runtime installation, background monitor, telemetry or cloud service.
+- **Platform:** the published release supports macOS/Linux CLI and unsigned macOS arm64 desktop. The Windows candidate targets 64-bit Windows 10 (1809+) / Windows 11 with installed 64-bit Python 3.11+, on a local fixed NTFS volume. It rejects network/UNC paths, junctions, reparse points (including OneDrive placeholders), alternate streams and case-sensitive directories. Windows native execution, signing and installer behavior remain unverified; no Windows release download is claimed. The Node/npm launcher still supports macOS/Linux only. No automatic runtime installation, background monitor, telemetry or cloud service.
 
 Development checks:
 

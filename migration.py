@@ -5,7 +5,6 @@ import argparse
 import copy
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
-import fcntl
 import hashlib
 import io
 import json
@@ -16,10 +15,15 @@ import re
 import signal
 import stat
 import sys
+import threading
+
+if os.name != 'nt':
+    import fcntl
 import uuid
 import zipfile
 
 import handoff as h
+import windows_io
 
 MAX_SOURCE = 1024 ** 3
 MAX_EXPANDED = 2 * 1024 ** 3
@@ -91,6 +95,22 @@ def pause_signals():
     try:
         for sig in previous:
             signal.signal(sig, handler)
+        if os.environ.get('HANDOFF_CANCEL_STDIN') == '1':
+            # A parent-owned pipe carries only one fixed control word, never imported text.
+            def control():
+                try:
+                    fd = sys.stdin.fileno()
+                    command = b''
+                    while len(command) < 6:
+                        part = os.read(fd, 1)
+                        if not part:
+                            return
+                        command += part
+                    if command == b'pause\n':
+                        requested[0] = True
+                except (OSError, ValueError):
+                    return
+            threading.Thread(target=control, daemon=True).start()
         yield lambda: requested[0]
     finally:
         for sig, old in previous.items():
@@ -144,6 +164,13 @@ def safe_destination(path):
 
 
 def open_input(path):
+    if os.name == 'nt':
+        import windows_io
+        stream = windows_io.open_file(path)
+        if os.fstat(stream.fileno()).st_size > MAX_SOURCE:
+            stream.close()
+            raise h.HandoffError('source must be a regular file no larger than 1 GiB')
+        return stream
     parent, name = h.open_parent(path)
     try:
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
@@ -160,6 +187,11 @@ class Store:
     """Flat, private, descriptor-relative files; no archive path is a write path."""
     def __init__(self, path, create=False):
         safe_destination(path)
+        self.windows: windows_io.Directory | None = None
+        self.fd = -1
+        if os.name == 'nt':
+            self.windows = windows_io.Directory(path, create=create)
+            return
         parent, name = h.open_parent(path)
         try:
             if create:
@@ -169,14 +201,55 @@ class Store:
             os.close(parent)
 
     def close(self):
-        os.close(self.fd)
+        if self.windows is not None:
+            self.windows.close()
+        else:
+            os.close(self.fd)
+
+    def open(self, name, mode='rb', exclusive=False):
+        h.safe_path(name)
+        h.require('/' not in name and mode in ('rb', 'wb'), 'invalid store file')
+        h.require(mode != 'wb' or exclusive, 'store streams require exclusive output')
+        if self.windows is not None:
+            return self.windows.open(name, mode, exclusive=exclusive)
+        if os.name == 'nt':
+            raise h.HandoffError('Windows store backend is unavailable')
+        flags = os.O_RDONLY | os.O_NONBLOCK if mode == 'rb' else os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        fd = os.open(name, flags | os.O_NOFOLLOW, 0o600, dir_fd=self.fd)
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            os.close(fd)
+            raise h.HandoffError('store stream must be regular')
+        return os.fdopen(fd, mode)
+
+    def names(self):
+        return self.windows.names() if self.windows is not None else os.listdir(self.fd)
+
+    def is_regular(self, name):
+        return self.windows.is_regular(name) if self.windows is not None else stat.S_ISREG(os.stat(name, dir_fd=self.fd, follow_symlinks=False).st_mode)
+
+    def unlink(self, name):
+        h.safe_path(name)
+        h.require('/' not in name, 'store names must be flat')
+        if self.windows is not None:
+            self.windows.unlink(name)
+        else:
+            os.unlink(name, dir_fd=self.fd)
+
+    def remove(self, path):
+        if self.windows is not None:
+            self.windows.remove()
+        else:
+            parent, name = h.open_parent(path)
+            try:
+                os.rmdir(name, dir_fd=parent)
+            finally:
+                os.close(parent)
 
     def read(self, name, limit=MAX_RECORD):
         h.safe_path(name)
         h.require('/' not in name, 'store names must be flat')
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.fd)
-        with os.fdopen(fd, 'rb') as stream:
-            h.require(stat.S_ISREG(os.fstat(fd).st_mode) and os.fstat(fd).st_size <= limit,
+        with self.open(name) as stream:
+            h.require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode) and os.fstat(stream.fileno()).st_size <= limit,
                       'store file is not a bounded regular file')
             data = stream.read(limit + 1)
             h.require(len(data) <= limit, 'store file exceeds size limit')
@@ -194,6 +267,13 @@ class Store:
                 if old != data:
                     raise StorageConflict('existing output conflicts with checkpoint; do not overwrite')
                 return
+        if self.windows is not None:
+            try:
+                return self.windows.write(name, data, replace=replace)
+            except FileExistsError as exc:
+                raise StorageConflict('existing output conflicts with checkpoint; do not overwrite') from exc
+        if os.name == 'nt':
+            raise h.HandoffError('Windows store backend is unavailable')
         temporary = 'pending-' + uuid.uuid4().hex
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=self.fd)
         try:
@@ -219,6 +299,12 @@ class Store:
 
     @contextmanager
     def lock(self):
+        if self.windows is not None:
+            with self.windows.lock():
+                yield
+            return
+        if os.name == 'nt':
+            raise h.HandoffError('Windows store backend is unavailable')
         fd = os.open('lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600, dir_fd=self.fd)
         try:
             h.require(stat.S_ISREG(os.fstat(fd).st_mode), 'lock must be regular')
@@ -276,9 +362,7 @@ class Store:
         return digest
 
     def source(self):
-        fd = os.open('source.bin', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.fd)
-        h.require(stat.S_ISREG(os.fstat(fd).st_mode), 'source snapshot must be regular')
-        return os.fdopen(fd, 'rb')
+        return self.open('source.bin')
 
 
 def file_digest(stream):
@@ -336,8 +420,7 @@ def plan(source, workspace, provider, format_name, expires_at=None, on_progress=
         try:
             with store.lock():
                 stream.seek(0)
-                fd = os.open('source.bin', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=store.fd)
-                with os.fdopen(fd, 'wb') as output:
+                with store.open('source.bin', 'wb', exclusive=True) as output:
                     copied = 0
                     while True:
                         block = stream.read(1024 * 1024)
@@ -891,8 +974,7 @@ def export(workspace, base_digest, output, target, include_source=False):
                 dest.write(mdname, markdown)
                 files.extend([{'file': item['file'], 'sha256': sha(raw)}, {'file': mdname, 'sha256': sha(markdown)}])
             if include_source:
-                fd = os.open('original-export.bin', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dest.fd)
-                with os.fdopen(fd, 'wb') as out, store.source() as src:
+                with dest.open('original-export.bin', 'wb', exclusive=True) as out, store.source() as src:
                     while True:
                         active(data)
                         block = src.read(1024 * 1024)
@@ -935,9 +1017,7 @@ def verify_export(path):
             seen.add(item['file'])
             h.digest_string(item['sha256'])
             if item['file'] == 'original-export.bin':
-                fd = os.open(item['file'], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=store.fd)
-                with os.fdopen(fd, 'rb') as stream:
-                    h.require(stat.S_ISREG(os.fstat(fd).st_mode), 'original must be regular')
+                with store.open(item['file']) as stream:
                     actual = file_digest(stream)[0]
             else:
                 actual = sha(store.read(item['file'], MAX_STATE))
@@ -952,26 +1032,26 @@ def purge(workspace, incomplete=False):
     try:
         with store.lock():
             if incomplete:
-                h.require('checkpoint.json' not in os.listdir(store.fd), 'completed checkpoint exists; use ordinary purge')
+                h.require('checkpoint.json' not in store.names(), 'completed checkpoint exists; use ordinary purge')
                 allowed = {'source.bin', 'lock'}
             else:
                 data, _ = store.checkpoint()
                 allowed = {'source.bin', 'checkpoint.json', 'lock'} | {item['file'] for item in data['records']}
                 allowed |= {item['previous'] for item in data['redactions']}
-            names = set(os.listdir(store.fd))
+            names = set(store.names())
             h.require(names <= allowed, 'unexpected workspace files; refusing deletion')
             for name in names:
-                h.require(stat.S_ISREG(os.stat(name, dir_fd=store.fd, follow_symlinks=False).st_mode), 'nonregular file; refusing deletion')
+                h.require(store.is_regular(name), 'nonregular file; refusing deletion')
             for name in names - {'lock'}:
-                os.unlink(name, dir_fd=store.fd)
-            os.unlink('lock', dir_fd=store.fd)
+                store.unlink(name)
+            if store.windows is None:
+                store.unlink('lock')
+        if store.windows is not None:
+            # Windows refuses deletion while another process holds the non-delete-shared lock.
+            store.unlink('lock')
+        store.remove(workspace)
     finally:
         store.close()
-    parent, name = h.open_parent(workspace)
-    try:
-        os.rmdir(name, dir_fd=parent)
-    finally:
-        os.close(parent)
     return {'removed': True, 'secure_erasure': False, 'copies_elsewhere': 'unaffected'}
 
 

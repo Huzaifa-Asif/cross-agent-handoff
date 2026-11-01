@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const {spawnSync} = require('node:child_process');
 const {command} = require('../contracts.cjs');
-const python = [process.env.HANDOFF_TEST_PYTHON, '/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3', 'python3'].filter(Boolean).find(p => spawnSync(p, ['-c','import sys;sys.exit(0 if sys.version_info >= (3,11) else 1)']).status === 0);
+const python = require('./python.cjs')();
 const engine = path.resolve(__dirname, '../../handoff.py');
 function invoke(args) {
   const result = spawnSync(python, ['-E', '-s', '-B', engine, ...args], {encoding:'utf8', timeout:20000});
@@ -127,4 +127,11 @@ test('renderer clears stale exports, unredacted previews and search when changin
   api.run=async()=>({...library('B'),complete:true,record_omissions:0,missing_source_fields:0,intentional_redactions:0,reference_notices:0});
   await click('refresh-review');assert.equal(nodes.get('progress').value,100);assert.equal(nodes.get('progress').hidden,false);
 
+});
+
+test('workflow navigation names match visible and accessible product labels',()=>{
+ const html=fs.readFileSync(path.resolve(__dirname,'../index.html'),'utf8');
+ assert.match(html,/<button id="task-tab"[^>]*><span aria-hidden="true">01<\/span> Task Hand Off<\/button>/);
+ assert.match(html,/<button id="migration-tab"[^>]*><span aria-hidden="true">02<\/span> Full Migration<\/button>/);
+ assert.doesNotMatch(html,/One task|Move my library/);
 });

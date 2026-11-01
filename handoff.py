@@ -351,8 +351,18 @@ def continue_bundle(current, edited, base_digest):
     return validate(result)
 
 
-def open_parent(path):
+def safe_io_available():
+    """Capability probe only; selected paths still undergo platform-specific checks."""
+    if os.name == 'nt':
+        import windows_io
+        return windows_io.capability()
+    return hasattr(os, 'O_NOFOLLOW') and hasattr(os, 'O_DIRECTORY')
+
+
+def open_parent(path) -> tuple[int, str]:
     """Traverse every directory with O_NOFOLLOW; caller closes returned descriptor."""
+    if os.name == 'nt':
+        raise HandoffError('POSIX traversal is unavailable on Windows')
     require(hasattr(os, 'O_NOFOLLOW') and hasattr(os, 'O_DIRECTORY'), 'safe I/O requires POSIX no-follow support')
     path = os.fspath(path)
     require(bool(path) and '\x00' not in path, 'invalid local filename')
@@ -374,6 +384,9 @@ def open_parent(path):
 
 
 def read_file(path):
+    if os.name == 'nt':
+        import windows_io
+        return windows_io.read_file(path, MAX_BYTES)
     parent, name = open_parent(path)
     try:
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
@@ -394,6 +407,9 @@ def write_file(path, data):
     require(len(data) <= MAX_BYTES, 'output exceeds size limit')
     parts = Path(os.path.abspath(path)).parts
     require(not any(p.lower() in ('agents.md', 'agents.override.md', 'claude.md', 'claude.local.md', 'gemini.md', '.cursorrules', '.cursor', '.claude', '.codex', '.gemini', '.github') for p in parts), 'refusing instruction/configuration destination')
+    if os.name == 'nt':
+        import windows_io
+        return windows_io.write_file(path, data)
     parent, name = open_parent(path)
     try:
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=parent)
@@ -406,6 +422,9 @@ def write_file(path, data):
 
 
 def purge_file(path):
+    if os.name == 'nt':
+        import windows_io
+        return windows_io.purge_file(path)
     parent, name = open_parent(path)
     try:
         require(stat.S_ISREG(os.stat(name, dir_fd=parent, follow_symlinks=False).st_mode), 'purge requires a regular named file')

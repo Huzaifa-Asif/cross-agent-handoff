@@ -19,13 +19,13 @@ test('streaming process decodes split Unicode, sanitizes progress and does not a
  const result=startProcess(process.execPath,['-e',script],{onProgress:event=>events.push(event)});
  assert.equal(await result.promise,'日本語');assert.equal(events.length,1);assert.equal(events[0].unknown,undefined);
 });
-test('pause waits for graceful exit130 and retains the emitted checkpoint',async()=>{
+test('pause waits for graceful exit130 and retains the emitted checkpoint',{skip:process.platform==='win32'},async()=>{
  let job;const events=[];
  const script=`process.on('SIGTERM',()=>{const d={paused:true,checkpoint:'${'b'.repeat(64)}'};process.stdout.write(JSON.stringify(d));process.exit(130);});process.stderr.write(JSON.stringify(${JSON.stringify(sample)})+'\\n');setInterval(()=>{},1000);`;
  job=startProcess(process.execPath,['-e',script],{allowPause:true,onProgress:event=>{events.push(event);job.cancel();}});
  const result=JSON.parse(await job.promise);assert.equal(result.paused,true);assert.equal(result.checkpoint,'b'.repeat(64));assert.equal(events.length,1);
 });
-test('unresponsive own child is killed after a bounded grace interval',async()=>{
+test('unresponsive own child is killed after a bounded grace interval',{skip:process.platform==='win32'},async()=>{
  let job;
  const script=`process.on('SIGTERM',()=>{});process.stderr.write(JSON.stringify(${JSON.stringify(sample)})+'\\n');setInterval(()=>{},1000);`;
  job=startProcess(process.execPath,['-e',script],{allowPause:true,killGraceMs:50,onProgress:()=>job.cancel()});
@@ -43,7 +43,7 @@ test('initial snapshot pause is distinguished from a resumable conversation chec
 });
 test('real shared engine auto-batches, pauses and resumes without duplicate or lost records',async()=>{
  const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{spawnSync}=require('node:child_process');
- const python=[process.env.HANDOFF_TEST_PYTHON,'/opt/homebrew/bin/python3','/usr/local/bin/python3','/usr/bin/python3','python3'].filter(Boolean).find(p=>spawnSync(p,['-c','import sys;sys.exit(0 if sys.version_info >= (3,11) else 1)']).status===0);
+ const python=require('./python.cjs')();
  assert.ok(python,'A supported Python runtime is required for desktop contract tests.');
  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'handoff-auto-desktop-'))),engine=path.resolve(__dirname,'../../handoff.py');
  const source=path.join(root,'source.json'),workspace=path.join(root,'library');
@@ -64,7 +64,7 @@ test('real shared engine auto-batches, pauses and resumes without duplicate or l
   const stale=spawnSync(python,['-B',engine,'migrate','run','--workspace',workspace,'--base-digest',plan.checkpoint],{encoding:'utf8'});assert.equal(stale.status,2);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
-test('an immediate pause waits for engine handler readiness instead of killing startup',async()=>{
+test('an immediate pause waits for engine handler readiness instead of killing startup',{skip:process.platform==='win32'},async()=>{
  const result={paused:true,checkpoint:'d'.repeat(64)};
  const script=`setTimeout(()=>{process.on('SIGTERM',()=>{process.stdout.write(JSON.stringify(${JSON.stringify(result)}));process.exit(130);});process.stderr.write(JSON.stringify(${JSON.stringify(sample)})+'\\n');setInterval(()=>{},1000);},100);`;
  const job=startProcess(process.execPath,['-e',script],{allowPause:true});job.cancel();assert.deepEqual(JSON.parse(await job.promise),result);
