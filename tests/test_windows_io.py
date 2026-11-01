@@ -183,12 +183,29 @@ finally: a.close(h)
 
     def test_ancestor_rename_cannot_redirect_handle_operations(self):
         moved = self.root.with_name(self.root.name + '-moved')
-        self.root.rename(moved)
+        self.directory.write('existing-record', b'original context')
+        try:
+            self.root.rename(moved)
+        except PermissionError as error:
+            # NTFS can also block an ancestor rename when a descendant is pinned.
+            # Refusal preserves the invariant; it is not a reason to relax the
+            # backend's sharing flags. Unexpected failure codes still fail.
+            self.assertIn(error.winerror, (5, 32))
+            self.assertTrue(self.root.is_dir())
+            self.assertTrue(self.path.is_dir())
+            self.assertFalse(moved.exists())
+            self.assertEqual((self.path / 'existing-record').read_bytes(), b'original context')
+            self.directory.write('original-only', b'inert')
+            self.assertEqual(self.directory.read('original-only', 100), b'inert')
+            self.assertEqual((self.path / 'original-only').read_bytes(), b'inert')
+            return
         try:
             self.root.mkdir()
             (self.root / 'private').mkdir()
             self.directory.write('original-only', b'inert')
+            self.assertEqual((moved / 'private' / 'existing-record').read_bytes(), b'original context')
             self.assertEqual((moved / 'private' / 'original-only').read_bytes(), b'inert')
+            self.assertFalse((self.root / 'private' / 'existing-record').exists())
             self.assertFalse((self.root / 'private' / 'original-only').exists())
         finally:
             (self.root / 'private').rmdir()

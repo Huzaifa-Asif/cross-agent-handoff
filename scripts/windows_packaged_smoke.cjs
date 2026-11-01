@@ -4,6 +4,15 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const {createHash} = require('node:crypto');
+async function capture(page, evidence, name) {
+  const bytes = await page.screenshot({path:path.join(evidence,name+'.png')});
+  assert.ok(bytes.length <= 1048576, 'Bounded synthetic screenshot evidence');
+  const data = bytes.toString('base64');
+  const count = Math.ceil(data.length / 4096);
+  console.log(JSON.stringify({handoffScreenshot:name,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),chunks:count}));
+  for(let index=0;index<count;index++) console.log(JSON.stringify({handoffScreenshot:name,index,data:data.slice(index*4096,(index+1)*4096)}));
+}
 async function main() {
   assert.equal(process.platform, 'win32', 'Run the packaged application on real Windows');
   const [executablePath, library, evidence] = process.argv.slice(2);
@@ -44,7 +53,7 @@ async function main() {
     await choose(workspace); await page.locator('#choose-workspace').click(); await idle();
     await page.locator('#confirm-migration').check();
     await page.locator('#plan-migration').click(); await idle();
-    await page.screenshot({path:path.join(evidence,'windows-planned.png')});
+    await capture(page,evidence,'windows-planned');
     // Reopen the durable plan through the user-facing resume path.
     await page.locator('#new-migration').click();
     await choose(workspace,true); await page.locator('#resume-library').click(); await idle();
@@ -62,7 +71,7 @@ async function main() {
     await choose(output); await page.locator('#export-migration').click(); await idle();
     await page.locator('#verify-export').click(); await idle();
     assert.match(await page.locator('#status-message').innerText(),/^2500 portable files verified/);
-    await page.screenshot({path:path.join(evidence,'windows-complete.png')});
+    await capture(page,evidence,'windows-complete');
     const result = {platform:process.platform,executablePath,ready,records:recordCount,verifiedFiles:recordCount*2,
       checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','reference export','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export'],
       gaps:['OS file picker uses documented synthetic dialog stubs','no signing or installer/SmartScreen validation','screenshots require human inspection; CI save alone is not visual review']};
