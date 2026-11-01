@@ -6,6 +6,7 @@ const fs = require('node:fs/promises');
 const {createReadStream} = require('node:fs');
 const path = require('node:path');
 const {createHash} = require('node:crypto');
+const {execFileSync} = require('node:child_process');
 async function capture(page, evidence, name) {
   const bytes = await page.screenshot({path:path.join(evidence,name+'.png')});
   assert.ok(bytes.length <= 1048576, 'Bounded synthetic screenshot evidence');
@@ -268,8 +269,53 @@ async function main() {
     assert.deepEqual({...newRecord,messages:oldRecord.messages,omissions:oldRecord.omissions},oldRecord);
     await assert.rejects(fs.access(path.join(redactedOutput,'original-export.bin')),{code:'ENOENT'});
     await capture(page,evidence,'windows-complete');
+    // The deadline passes after a successful live review/export: no Refresh is
+    // allowed between the trusted backend rejection and read-only UI checks.
+    const expirySource=path.join(evidence,'expiry-source.json'),expiryLibrary=path.join(evidence,'expiry-library');
+    const expiryA=path.join(evidence,'expiry-active-copy'),expiryB=path.join(evidence,'expiry-blocked-copy');
+    await fs.writeFile(expirySource,JSON.stringify([{id:'expiry',messages:[{role:'user',text:'Synthetic retention check'}]}]));
+    const engine=path.join(path.dirname(executablePath),'resources','app','engine','handoff.py');
+    // setup-python supplies this test interpreter on PATH. The app still uses
+    // its separately probed runtime; no runtime installation is performed.
+    const cli=args=>JSON.parse(execFileSync('python',['-X','utf8','-E','-s','-B',engine,...args],
+      {encoding:'utf8',timeout:15000,maxBuffer:1048576,env:{...process.env,PYTHON_MANAGER_AUTOMATIC_INSTALL:'false'}}));
+    const deadline=new Date(Date.now()+45000);
+    const expiryPlan=cli(['migrate','plan',expirySource,'--workspace',expiryLibrary,'--provider','generic','--format','generic-json','--expires-at',deadline.toISOString(),'--confirm-long-term-migration']);
+    cli(['migrate','run','--workspace',expiryLibrary,'--base-digest',expiryPlan.checkpoint]);
+    const snapshotSmall=async directory=>{
+      const names=(await fs.readdir(directory)).sort();assert.ok(names.length<=16);
+      return Promise.all(names.map(async name=>{
+        const file=path.join(directory,name),info=await fs.lstat(file);assert.ok(info.isFile()&&!info.isSymbolicLink()&&info.size<=1048576);
+        const data=await fs.readFile(file);assert.equal(data.length,info.size);
+        return [name,createHash('sha256').update(data).digest('hex')];
+      }));
+    };
+    await page.locator('#new-migration').click();
+    await choose(expiryLibrary,true);await page.locator('#resume-library').click();await idle();
+    await page.locator('#confirm-reviewed').check();
+    await choose(expiryA);await page.locator('#export-migration').click();await idle();
+    assert.ok(Date.now()<deadline.getTime(),'Initial export must precede retention expiry');
+    const libraryBeforeExpiry=await snapshotSmall(expiryLibrary),copyBeforeExpiry=await snapshotSmall(expiryA);
+    await new Promise(resolve=>setTimeout(resolve,Math.max(0,deadline.getTime()-Date.now()+50)));
+    assert.equal(cli(['migrate','review','--workspace',expiryLibrary]).expired,true);
+    await choose(expiryB);await page.locator('#export-migration').click();
+    await page.locator('#cancel-operation').waitFor({state:'hidden'});
+    assert.equal(await page.locator('#status-box').evaluate(element=>element.classList.contains('error')),true);
+    assert.match(await page.locator('#status-message').innerText(),/retention has expired/i);
+    const expiredPhase=await page.locator('#migration-phase').innerText();
+    assert.match(expiredPhase,/expired.*read.only/i);assert.doesNotMatch(expiredPhase,/resume|100(?:\.0)?%/i);
+    assert.equal(await page.locator('#progress').isHidden(),true);
+    assert.equal(await page.locator('#verify-export').isHidden(),true);
+    assert.equal(await page.locator('#migration-export-panel').isHidden(),true);
+    assert.equal(await page.locator('#export-migration').isDisabled(),true);
+    assert.equal(await page.locator('#include-original').isDisabled(),true);
+    await assert.rejects(fs.access(expiryB),{code:'ENOENT'});
+    assert.deepEqual(await snapshotSmall(expiryLibrary),libraryBeforeExpiry);
+    assert.deepEqual(await snapshotSmall(expiryA),copyBeforeExpiry);
+    await page.locator('#migration-phase').click();
+    await capture(page,evidence,'windows-expired');
     const result = {platform:process.platform,executablePath,ready,records:recordCount,verifiedFiles:recordCount*2,packageFiles:await packageManifest(path.dirname(executablePath)),
-      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','business and developer saved snapshots preserve all fields','separate creation and read-only review','explicit task review confirmation','informational task expiry','digest-bound reference export','stale source rejected without output','reopen and review recovery','cancelled open clears prior task','malformed selected source has honest zero-record omissions','metadata-only copy explicitly contains no conversation data','no false zero-file metadata authentication','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','cancelled destination preserves earlier selected copy','failed new destination clears prior verification selection','existing data unchanged after failure','changed portable checkpoint rejected in current-copy verification','fresh-copy export recovery','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state','explicit guided redaction','selection does not apply','old exports/revisions/snapshot unchanged','new redacted export verified','raw source excluded after redaction'],
+      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','business and developer saved snapshots preserve all fields','separate creation and read-only review','explicit task review confirmation','informational task expiry','digest-bound reference export','stale source rejected without output','reopen and review recovery','cancelled open clears prior task','malformed selected source has honest zero-record omissions','metadata-only copy explicitly contains no conversation data','no false zero-file metadata authentication','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','cancelled destination preserves earlier selected copy','failed new destination clears prior verification selection','existing data unchanged after failure','changed portable checkpoint rejected in current-copy verification','fresh-copy export recovery','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state','explicit guided redaction','selection does not apply','old exports/revisions/snapshot unchanged','new redacted export verified','raw source excluded after redaction','retention expiry after active review immediately switches to read-only without Refresh'],
       gaps:['OS file picker uses documented synthetic dialog stubs','no signing or installer/SmartScreen validation','screenshots require human inspection; CI save alone is not visual review']};
     await fs.writeFile(path.join(evidence,'validation.json'),JSON.stringify(result,null,2));
     console.log(JSON.stringify(result));

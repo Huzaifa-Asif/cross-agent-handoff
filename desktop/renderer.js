@@ -184,7 +184,7 @@ function update() {
   $('process-batch').disabled = library.complete || Boolean(library.expired);
   $('export-migration').disabled = Boolean(library.expired || library.verification_pending);
   $('process-batch').textContent = state.paused || library.processed_units || library.normalized_records ? 'Resume full migration' : 'Start full migration';
-  $('migration-export-panel').hidden = !library.complete || Boolean(library.verification_pending);
+  $('migration-export-panel').hidden = !library.complete || Boolean(library.expired || library.verification_pending);
   $('include-original').disabled = library.redactions > 0 || Boolean(library.expired || library.verification_pending);
   if (library.redactions > 0) $('include-original').checked = false;
   describeNextExport();
@@ -400,7 +400,9 @@ $('export-migration').addEventListener('click', () => perform('Choose a new fold
   } catch(error) {
     clearSavedOutput('Unverified attempted output: '+output.label);
     const detail=String(error.message || '').replace(/^Error invoking remote method 'run-engine': Error:\s*/, '').replace(/^error:\s*/, '');
-    const reason=/^migration expired; create a fresh reviewed plan$/.test(detail)?'Full Migration retention has expired. Review remains available; use a fresh authorized plan for any further processing or export.':/^(?:Stopped\.|The process did not pause within five seconds and was stopped\.)/.test(detail)?'Export was stopped or cancelled; inspect the attempted location and choose a fresh destination before retrying.':/^(?:\[Errno 17\] File exists|\[WinError 183\] Cannot create a file when that file already exists)/.test(detail)?'The destination already exists; choose a new location.':/^(?:stale checkpoint; review before export|The export result does not match the reviewed checkpoint and record count\.)$/.test(detail)?'The reviewed checkpoint changed or could not be confirmed.':/^source snapshot (?:digest|size) mismatch$/.test(detail)?'Local library integrity checks failed.':'The export could not be confirmed against the reviewed library.';
+    const retentionExpired=/^migration expired; create a fresh reviewed plan$/.test(detail);
+    if(retentionExpired && state.library) state.library.expired=true;
+    const reason=retentionExpired?'Full Migration retention has expired. Review remains available; use a fresh authorized plan for any further processing or export.':/^(?:Stopped\.|The process did not pause within five seconds and was stopped\.)/.test(detail)?'Export was stopped or cancelled; inspect the attempted location and choose a fresh destination before retrying.':/^(?:\[Errno 17\] File exists|\[WinError 183\] Cannot create a file when that file already exists)/.test(detail)?'The destination already exists; choose a new location.':/^(?:stale checkpoint; review before export|The export result does not match the reviewed checkpoint and record count\.)$/.test(detail)?'The reviewed checkpoint changed or could not be confirmed.':/^source snapshot (?:digest|size) mismatch$/.test(detail)?'Local library integrity checks failed.':'The export could not be confirmed against the reviewed library.';
     throw new Error(`${reason} The attempted output may be absent or incomplete; inspect its location below before retrying. No earlier copy is selected for verification. Refresh library review if its checkpoint changed.`);
   }
 }));

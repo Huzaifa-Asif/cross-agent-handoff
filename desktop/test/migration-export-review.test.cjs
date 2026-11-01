@@ -235,6 +235,15 @@ test('expiry after active review and A export rejects selected B without changin
   assert.equal(cli(['migrate','review','--workspace',libraries.A.workspace]).expired, true);
   await h.export(b); assertCleared(h, a.label);
   assert.match(h.nodes.get('status-message').textContent, /expir/i);
+  // This trusted backend error is new expiry knowledge; no Refresh is needed
+  // before the displayed phase and available mutations become read-only.
+  const expiredPhase = h.nodes.get('migration-phase').textContent;
+  assert.match(expiredPhase, /expired/i); assert.match(expiredPhase, /read.only/i);
+  assert.doesNotMatch(expiredPhase, /resume|100(?:\.0)?%/i);
+  assert.equal(h.nodes.get('progress').hidden, true);
+  assert.equal(h.nodes.get('export-migration').disabled, true);
+  assert.equal(h.nodes.get('include-original').disabled, true);
+  assert.equal(h.nodes.get('migration-export-panel').hidden, true);
   assert.equal(fs.existsSync(b.handle), false);
   assert.equal(fs.existsSync(path.join(a.handle, 'manifest.json')), true);
   assert.deepEqual(snapshot(), before);
@@ -311,6 +320,10 @@ test('ordinary filesystem errors with expired and cancelled path components rema
   assert.match(message, /could not be confirmed|could not confirm|failed/i);
   assert.doesNotMatch(message, /expired|cancelled|retention|stopped|interrupted/i);
   assert.doesNotMatch(message, /EACCES|\/synthetic\//);
+  assert.doesNotMatch(h.nodes.get('migration-phase').textContent, /expired|read.only/i);
+  assert.equal(h.nodes.get('export-migration').disabled, false, 'A path component does not expire a valid library');
+  assert.equal(h.nodes.get('include-original').disabled, false);
+  assert.equal(h.nodes.get('migration-export-panel').hidden, false);
   assert.equal(exporting, 2);
 });
 
