@@ -24,6 +24,7 @@ jobs:
       - run: python -m unittest discover -s tests -p test_windows_io.py -v
       - run: python -m unittest discover -s tests -p test_windows_journeys.py -v
       - run: python -m unittest discover -s tests -p test_store_retry.py -v
+      - run: python -m unittest discover -s tests -p test_zip_preflight.py -v
       - run: python -m compileall -q handoff.py migration.py windows_io.py
   packaged-desktop:
     runs-on: windows-latest
@@ -50,4 +51,5 @@ jobs:
       - run: npm install --prefix "$env:RUNNER_TEMP/handoff-smoke-tools" --ignore-scripts --no-audit --no-fund --package-lock=false playwright-core@1.64.1
       - run: node scripts/windows_packaged_smoke.cjs "$env:RUNNER_TEMP/handoff-windows/Cross-Agent Handoff-win32-x64/Cross-Agent Handoff.exe" "$env:RUNNER_TEMP/handoff-smoke-tools/node_modules/playwright-core" "$env:RUNNER_TEMP/handoff-smoke-evidence"
 # Standard public-repository runners only. No caches/artifact uploads, deployment,
-# signing, installation or publication. Screenshots/evidence stay on ephemeral runner.
+# signing, installation or publication. Bounded synthetic screenshots and package
+# hashes are retained in public job logs; no artifact-storage uploads.

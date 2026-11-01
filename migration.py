@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import signal
 import stat
+import struct
 import sys
 import threading
 
@@ -31,6 +32,7 @@ MAX_MEMBER = 32 * 1024 ** 2
 MAX_RECORD = 16 * 1024 ** 2
 MAX_STATE = 16 * 1024 ** 2
 MAX_MEMBERS = 10000
+MAX_ZIP_DIRECTORY = 32 * 1024 ** 2
 MAX_RECORDS = 50000
 MAX_NODES = 500000
 MAX_STATE_NODES = 2000000
@@ -58,6 +60,81 @@ class IntegrityError(h.HandoffError):
     """Snapshot/record changes are fatal, never parser omissions."""
 
 
+class OperationPaused(Exception):
+    """Internal cancellation, distinct from malformed input and integrity errors."""
+
+
+def poll_pause(should_pause):
+    if should_pause and should_pause():
+        raise OperationPaused()
+
+
+class PausingReader:
+    """Polling adapter for bounded hashing; keeps file_digest's public contract."""
+    def __init__(self, stream, should_pause):
+        self.stream, self.should_pause = stream, should_pause
+
+    def read(self, size):
+        poll_pause(self.should_pause)
+        return self.stream.read(size)
+
+    def seek(self, *args):
+        return self.stream.seek(*args)
+
+
+class ZipMetadataView:
+    """Immutable approved ZIP metadata; payloads remain on the selected handle.
+
+    This prevents a POSIX writer changing the directory between validation and
+    ZipFile construction. It does not certify mutable payloads: existing source
+    hashes, ZIP CRC checks and checkpoint verification still do that separately.
+    """
+    def __init__(self, source, size, start, central, footer, members):
+        self.source, self.size, self.start = source, size, start
+        self.central, self.footer, self.members = central, footer, members
+        self.position = 0
+
+    def tell(self):
+        return self.position
+
+    def seekable(self):
+        return True
+
+    def seek(self, offset, whence=0):
+        if whence not in (0, 1, 2):
+            raise ValueError('invalid ZIP seek origin')
+        position = offset + (self.position if whence == 1 else self.size if whence == 2 else 0)
+        if position < 0:
+            raise ValueError('negative ZIP seek')
+        self.position = position
+        return position
+
+    def read(self, size=-1):
+        remaining = max(0, self.size - self.position)
+        count = remaining if size < 0 else min(size, remaining)
+        pieces = []
+        while count:
+            if self.position < self.start:
+                length = min(count, self.start - self.position)
+                self.source.seek(self.position)
+                piece = self.source.read(length)
+                h.require(len(piece) <= length, 'ZIP source returned an oversized read')
+            elif self.position < self.start + len(self.central):
+                offset = self.position - self.start
+                length = min(count, len(self.central) - offset)
+                piece = self.central[offset:offset + length]
+            else:
+                offset = self.position - self.start - len(self.central)
+                length = count
+                piece = self.footer[offset:offset + length]
+            pieces.append(piece)
+            self.position += len(piece)
+            count -= len(piece)
+            if len(piece) < length:
+                break
+        return pieces[0] if len(pieces) == 1 else b''.join(pieces)
+
+
 def progress_event(result, phase, batch_number=0):
     """Only bounded counters/phase/lineage are streamed, never imported content."""
     omitted = result.get('preserved_only_units', 0) + result.get('partially_normalized_units', 0)
@@ -75,6 +152,15 @@ def progress_event(result, phase, batch_number=0):
             'progress_percent': percentage if phase not in ('paused', 'error') else None,
             'omitted_units': omitted, 'complete': complete, 'paused': result.get('paused', False)}
     event.update({key: result[key] for key in FINDING_COUNTS if key in result})
+    if phase == 'checking' or result.get('verification_pending') is True:
+        event['verification_pending'] = True
+        event['progress_percent'] = None
+        event['complete'] = False
+        event['total_records'] = None
+        for key in FINDING_COUNTS:
+            event.pop(key, None)
+    elif all(key in result for key in FINDING_COUNTS):
+        event['verification_pending'] = False
     if 'processed_units' not in result:
         event.pop('processed_units')
     if 'normalized_records' not in result:
@@ -379,12 +465,111 @@ def file_digest(stream):
     return digest.hexdigest(), total
 
 
-def zip_units(stream):
-    with zipfile.ZipFile(stream) as archive:
+def _zip_view(stream, should_pause=None):
+    """Bound metadata BEFORE ZipFile reads/allocates its complete directory.
+
+    ZIP APPNOTE 6.3.10 sections 4.3.12, 4.3.14-16 (checked 2026-11-01):
+    https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
+    CPython eagerly reads the central directory and constructs all ZipInfo:
+    https://github.com/python/cpython/blob/v3.13.0/Lib/zipfile/__init__.py
+    Only ordinary single-disk ZIP and fixed-size ZIP64 end records are accepted.
+    Prepended data is supported; extensible ZIP64 end sectors are not guessed.
+    Filename, extra and comment bytes share a 32 MiB aggregate metadata limit.
+    """
+    position = stream.tell()
+    try:
+        poll_pause(should_pause)
+        stream.seek(0, 2)
+        size = stream.tell()
+        h.require(22 <= size <= MAX_SOURCE, 'ZIP source is truncated or exceeds 1 GiB')
+        tail_start = max(0, size - 65535 - 22)
+        stream.seek(tail_start)
+        tail = stream.read(size - tail_start)
+        index = tail.rfind(b'PK\x05\x06')
+        h.require(index >= 0 and index + 22 <= len(tail), 'ZIP end record is truncated')
+        end = struct.unpack_from('<4s4H2IH', tail, index)
+        h.require(index + 22 + end[7] == len(tail), 'ZIP comment is truncated or trailing data is unsupported')
+        end_position = tail_start + index
+        h.require(end[1] == end[2] == 0, 'multidisk ZIP is unsupported')
+        disk_count, count, directory_size, directory_offset = end[3:7]
+        directory_end = end_position
+        locator = b''
+        zip64_footer = b''
+        if end_position >= 20:
+            stream.seek(end_position - 20)
+            locator = stream.read(20)
+        if locator.startswith(b'PK\x06\x07'):
+            _, disk, zip64_offset, disks = struct.unpack('<4sIQI', locator)
+            h.require(disk == 0 and disks == 1, 'multidisk ZIP64 is unsupported')
+            directory_end = end_position - 20 - 56
+            h.require(directory_end >= 0, 'ZIP64 end record is truncated')
+            stream.seek(directory_end)
+            raw = stream.read(56)
+            h.require(len(raw) == 56 and raw[:4] == b'PK\x06\x06',
+                      'ZIP64 end extensions are unsupported or the end record is truncated')
+            record = struct.unpack('<4sQ2H2I4Q', raw)
+            zip64_footer = raw + locator
+            h.require(record[1] == 44 and record[4] == record[5] == 0,
+                      'ZIP64 end extensions or multidisk archives are unsupported')
+            for original, actual, sentinel in zip(end[3:7], record[6:10], (65535, 65535, 0xFFFFFFFF, 0xFFFFFFFF)):
+                h.require(original in (actual, sentinel), 'inconsistent ZIP64 end metadata')
+            disk_count, count, directory_size, directory_offset = record[6:10]
+            h.require(zip64_offset == directory_offset + directory_size and zip64_offset <= directory_end,
+                      'invalid ZIP64 directory offset')
+        else:
+            h.require(disk_count != 65535 and count != 65535 and
+                      directory_size != 0xFFFFFFFF and directory_offset != 0xFFFFFFFF,
+                      'ZIP64 locator is missing')
+        h.require(disk_count == count, 'inconsistent ZIP member counts')
+        h.require(count <= MAX_MEMBERS, 'ZIP exceeds 10000 members')
+        h.require(directory_size <= MAX_ZIP_DIRECTORY, 'ZIP directory exceeds 32 MiB metadata limit')
+        start = directory_end - directory_size
+        h.require(0 <= directory_offset <= start <= directory_end <= size,
+                  'ZIP directory range is invalid')
+        poll_pause(should_pause)
+        stream.seek(start)
+        central = stream.read(directory_size)
+        h.require(len(central) == directory_size, 'ZIP directory is truncated')
+        footer = zip64_footer + tail[index:]
+        h.require(len(footer) == size - directory_end, 'ZIP footer range is invalid')
+        observed, cursor = 0, start
+        while cursor < directory_end:
+            poll_pause(should_pause)
+            h.require(directory_end - cursor >= 46, 'ZIP directory header is truncated')
+            header = central[cursor - start:cursor - start + 46]
+            h.require(len(header) == 46 and header[:4] == b'PK\x01\x02',
+                      'ZIP directory contains an unsupported or invalid record')
+            name, extra, comment, disk = struct.unpack_from('<4H', header, 28)
+            # UTF-8 can use four bytes per character, plus a directory's slash;
+            # decoded names still undergo the existing 1024-character/path checks.
+            h.require(0 < name <= 4097 and disk == 0, 'ZIP member name is oversized or multidisk')
+            h.require(struct.unpack_from('<H', header, 6)[0] <= 63,
+                      'ZIP member requires an unsupported extraction version')
+            length = 46 + name + extra + comment
+            h.require(length <= directory_end - cursor, 'ZIP directory variable fields are truncated')
+            observed += 1
+            h.require(observed <= MAX_MEMBERS, 'ZIP exceeds 10000 members')
+            cursor += length
+        h.require(observed == count, 'ZIP member count does not match its directory')
+        poll_pause(should_pause)
+        return ZipMetadataView(stream, size, start, central, footer, observed)
+    finally:
+        stream.seek(position)
+
+
+def zip_preflight(stream, should_pause=None):
+    """Validate bounded, immutable metadata and return the observed member count."""
+    return _zip_view(stream, should_pause).members
+
+
+def zip_units(stream, should_pause=None):
+    view = _zip_view(stream, should_pause)
+    with zipfile.ZipFile(view) as archive:
         entries = archive.infolist()
         h.require(len(entries) <= MAX_MEMBERS, 'ZIP exceeds 10000 members')
         units, seen, total = [], set(), 0
         for entry in entries:
+            poll_pause(should_pause)
             name = entry.filename[:-1] if entry.is_dir() else entry.filename
             h.require(entry.orig_filename == entry.filename, 'ZIP names with NUL are rejected')
             h.safe_path(name)
@@ -398,7 +583,18 @@ def zip_units(stream):
             h.require(entry.file_size <= max(1024 * 1024, entry.compress_size * 200), 'ZIP compression ratio exceeds limit')
             if not entry.is_dir():
                 units.append({'member': entry.filename, 'bytes': entry.file_size})
+        poll_pause(should_pause)
         return units
+
+
+def zip_candidate(stream):
+    # A malformed ordinary ZIP must not become an opaque non-ZIP snapshot merely
+    # because a Python version's is_zipfile rejects its end metadata.
+    stream.seek(0)
+    signature = stream.read(4)
+    result = signature in (b'PK\x03\x04', b'PK\x05\x06', b'PK\x06\x06') or zipfile.is_zipfile(stream)
+    stream.seek(0)
+    return result
 
 
 def plan(source, workspace, provider, format_name, expires_at=None, on_progress=None, should_pause=None):
@@ -410,12 +606,18 @@ def plan(source, workspace, provider, format_name, expires_at=None, on_progress=
         if on_progress:
             on_progress({'event': 'migration-progress', 'phase': 'checking', 'batch_number': 0,
                          'complete': False, 'progress_percent': None, 'total_records': None})
-        digest, size = file_digest(stream)
+        try:
+            digest, size = file_digest(PausingReader(stream, should_pause))
+        except OperationPaused as exc:
+            raise SnapshotCancelled('Snapshot cancelled while hashing; original export unchanged') from exc
         if should_pause and should_pause():
             raise SnapshotCancelled('Snapshot cancelled before workspace creation; original export unchanged')
-        zipped = zipfile.is_zipfile(stream)
-        stream.seek(0)
-        units = zip_units(stream) if zipped else [{'member': 'selected-export', 'bytes': size}]
+        zipped = zip_candidate(stream)
+        try:
+            units = zip_units(stream, should_pause) if zipped else [{'member': 'selected-export', 'bytes': size}]
+            poll_pause(should_pause)
+        except OperationPaused as exc:
+            raise SnapshotCancelled('Archive preflight cancelled before workspace creation; original export unchanged') from exc
         store = Store(workspace, create=True)
         try:
             with store.lock():
@@ -438,7 +640,18 @@ def plan(source, workspace, provider, format_name, expires_at=None, on_progress=
                     output.flush()
                     os.fsync(output.fileno())
                 with store.source() as snapshot:
-                    h.require(file_digest(snapshot) == (digest, size), 'source changed during snapshot; start a fresh plan')
+                    try:
+                        actual = file_digest(PausingReader(snapshot, should_pause))
+                    except OperationPaused as exc:
+                        raise SnapshotCancelled('Snapshot verification cancelled; inspect the incomplete private workspace') from exc
+                    h.require(actual == (digest, size), 'source changed during snapshot; start a fresh plan')
+                    # Only the hash-verified private snapshot defines final units.
+                    # The selected source may have changed A/B/A around preflight.
+                    zipped = zip_candidate(snapshot)
+                    try:
+                        units = zip_units(snapshot, should_pause) if zipped else [{'member': 'selected-export', 'bytes': size}]
+                    except OperationPaused as exc:
+                        raise SnapshotCancelled('Snapshot archive preflight cancelled; inspect the incomplete private workspace') from exc
                 data = {'migration_schema_version': '1.0', 'id': str(uuid.uuid4()), 'revision': 1,
                         'parent_digest': None, 'created_at': datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'),
                         'expires_at': expires_at, 'provider': provider, 'format': format_name,
@@ -698,12 +911,17 @@ def completion_phase(result):
     return 'complete'
 
 
-def check_snapshot(store, data):
+def check_snapshot(store, data, should_pause=None):
     counts = dict.fromkeys(FINDING_COUNTS, 0)
     try:
         with store.source() as source:
-            h.require(file_digest(source) == (data['source_sha256'], data['source_bytes']), 'source snapshot digest mismatch')
+            h.require(file_digest(PausingReader(source, should_pause)) == (data['source_sha256'], data['source_bytes']), 'source snapshot digest mismatch')
+            actual_zip = zip_candidate(source)
+            h.require(actual_zip == data['zip'], 'checkpoint container does not match source snapshot; create a fresh plan')
+            units = zip_units(source, should_pause) if actual_zip else [{'member': 'selected-export', 'bytes': data['source_bytes']}]
+            h.require(units == data['units'], 'checkpoint units do not match source snapshot; create a fresh plan')
         for item in data['records']:
+            poll_pause(should_pause)
             raw = store.read(item['file'])
             h.require(sha(raw) == item['sha256'], 'record digest mismatch; reconcile checkpoint')
             add_findings(counts, record_findings(bounded_json(raw)))
@@ -735,18 +953,19 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
     h.require(1 <= max_units <= MAX_MEMBERS, 'max-units must be 1..10000')
     h.require(1 <= max_records <= MAX_RECORDS, 'max-records must be 1..50000')
     store = Store(workspace)
+    data, digest, findings = None, None, None
     try:
         with store.lock():
             data, digest = store.checkpoint()
             h.require(digest == base_digest, 'stale checkpoint; review before resuming')
             active(data)
-            findings = check_snapshot(store, data)
+            findings = check_snapshot(store, data, should_pause)
             if on_progress:
                 on_progress(progress_event(summary(data, digest, findings), 'processing', batch_number))
             stop = min(len(data['units']), data['next_unit'] + max_units)
             processed = 0
             with store.source() as source:
-                archive = zipfile.ZipFile(source) if data['zip'] else None
+                archive = zipfile.ZipFile(_zip_view(source, should_pause)) if data['zip'] else None
                 try:
                     while data['next_unit'] < stop:
                         active(data)
@@ -791,7 +1010,7 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
                                     if processed >= max_records:
                                         if processed % 50:
                                             digest = store.save(data, digest)
-                                        check_snapshot(store, data)
+                                        check_snapshot(store, data, should_pause)
                                         active(data)
                                         return summary(data, digest, findings)
                             finally:
@@ -816,9 +1035,19 @@ def run(workspace, base_digest, max_units=20, max_records=1000, on_progress=None
                 finally:
                     if archive:
                         archive.close()
-            check_snapshot(store, data)
+            check_snapshot(store, data, should_pause)
             active(data)
             return summary(data, digest, findings)
+    except OperationPaused:
+        # Hash/preflight cancellation never means corruption or a parsed omission.
+        # Every verification boundary here follows a durable checkpoint save.
+        result = summary(data, digest, findings)
+        for key in FINDING_COUNTS:
+            result.pop(key)
+        result.update(paused=True, complete=False, phase='paused', verification_pending=True)
+        if on_progress:
+            on_progress(progress_event(result, 'paused', batch_number))
+        return result
     finally:
         store.close()
 

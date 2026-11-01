@@ -16,13 +16,17 @@ The Mac app is **unsigned and not notarized**. Do not bypass OS security warning
 
 **Full Migration:** first download an official export from your current provider. Select that file in the app, choose its parser (or preserve-only mode), choose a new local library folder, and confirm the long-term move. Start processing once: the app runs bounded batches automatically. Review findings, redact selected fields, and save reviewed portable files. You can pause and resume an existing library.
 
+In the current candidate, inline format guidance explains what each reader can preserve. The app suggests a starting format until you choose one yourself; it then keeps your choice when the source assistant changes. Match the reader to the file contents, not just its filename or provider label. If a pause occurs while saved files are being verified, the app retains the checkpoint and marks findings unverified. It clears old record views and does not immediately start another verification. Choose Resume full migration or Refresh review explicitly to verify the saved library.
+
+The expandable **Setup & recovery help — on this computer** stays local and explains runtime readiness, cancelled snapshots and resuming a saved library. It never deletes an incomplete folder for you.
+
 Your files stay local. Full Migration preserves the selected export and available parsed context; it cannot establish that the provider supplied your entire account state. Reference files do not recreate native history, settings or hidden memory. Gemini separately supports importing certain original provider archives; this generated portable library is not that format.
 
 Expiry blocks further processing/export but does not delete originals. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
 
 ## Develop or build
 
-Building requires Node 22.12+, npm and Python 3.11+. Run from this repository:
+Building requires Node 22.12+, npm and Python 3.11+. The commands below start the Mac development app from this repository. Windows build tooling lives on [`feature/windows-desktop`](https://github.com/Huzaifa-Asif/cross-agent-handoff/tree/feature/windows-desktop), which must be checked out separately; it has not been merged into main.
 
 ```sh
 cd desktop
@@ -33,7 +37,7 @@ npm run setup:electron
 npm start
 ```
 
-`setup:electron` explicitly downloads the pinned official development runtime; `npm start` never downloads it. To package, run `npm run build:mac` on macOS or `npm run build:windows` for the Windows candidate. Packaging explicitly obtains the pinned official Electron binary. Set `HANDOFF_DESKTOP_OUTPUT` to a new output directory to preserve earlier artifacts; the default is the task's sibling `desktop-artifacts` directory outside the source tree.
+`setup:electron` explicitly downloads the pinned official development runtime; `npm start` never downloads it. To package the Mac app, run `npm run build:mac` on macOS. To build Windows, use `npm run build:windows` only after checking out the Windows candidate branch. Packaging explicitly obtains the pinned official Electron binary. Set `HANDOFF_DESKTOP_OUTPUT` to a new output directory to preserve earlier artifacts; the default is the task's sibling `desktop-artifacts` directory outside the source tree.
 
 ## Security model
 
@@ -46,9 +50,13 @@ Developer tests use synthetic fixtures and no model/API calls. These checks do n
 
 ## Windows portable candidate
 
-The same app and shared engine can be packaged for Windows x64 using Node 22.12+ and an explicitly installed Python 3.11+:
+The same app and shared engine can be packaged for Windows x64 using Node 22.12+ and an explicitly installed Python 3.11+. Start from a Git clone (requires Git), select the candidate branch, then build:
 
 ```sh
+# From the root of your Git clone:
+git fetch origin
+git switch feature/windows-desktop
+cd desktop
 npm ci --ignore-scripts
 npm run check
 npm test
@@ -66,3 +74,5 @@ The pinned Electron Packager uses JavaScript `resedit` for metadata: no Wine, in
 Before claiming native Windows support, run the suite on Windows and inspect the actual packaged executable: task save/open/export; selected-file migration; progress; early pause; relaunch/resume; redaction; existing output rejection; malformed imports; and rejection of unsupported network/removable/reparse locations. Mac cross-builds and simulated Windows control tests do not establish native behavior.
 
 References: [Electron Packager targets](https://electron.github.io/packager/main/), [packager options](https://electron.github.io/packager/main/interfaces/Options.html), [Python Windows launcher/manager](https://docs.python.org/3/using/windows.html).
+
+Candidate validation: [Windows CI on commit d009d68](https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/runs/41339432706) passed native Python 3.11/3.13 file-safety, task, migration, redaction, pause/resume and retry tests, plus packaged startup and a 1,250-conversation / 2,500-file journey on Windows Server 2025. File selection in that GUI check uses documented synthetic dialog stubs. This does not establish consumer Windows 10/11 coverage, real OS file-picker interaction, signing, SmartScreen or installation behavior. No Windows release has been published.

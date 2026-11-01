@@ -94,3 +94,9 @@ test('notice-only completion is delivered immediately and a late pause does not 
  job=startProcess(process.execPath,['-e',script],{allowPause:true,onProgress:event=>{phases.push(event.phase);if(event.phase==='complete-with-notices')job.cancel();}});
  assert.equal(JSON.parse(await job.promise).complete,true);assert.ok(phases.includes('complete-with-notices'));assert.equal(job.process.signalCode,null);
 });
+
+test('verification-pending events preserve the flag and suppress unverified findings and success',()=>{
+ const safe=sanitizeProgress({...sample,phase:'complete',complete:true,verification_pending:true,progress_percent:100,record_omissions:0,omitted_units:0});
+ assert.equal(safe.verification_pending,true);assert.equal(safe.complete,false);assert.equal(safe.progress_percent,null);assert.equal(safe.record_omissions,undefined);assert.equal(safe.omitted_units,undefined);
+ assert.equal(sanitizeProgress({...sample,verification_pending:'true'}).verification_pending,undefined);
+});

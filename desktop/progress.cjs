@@ -10,12 +10,17 @@ function sanitizeProgress(value) {
     else if (Number.isSafeInteger(value[field]) && value[field] >= 0 && value[field] <= 2 ** 40) result[field] = value[field];
   }
   if (typeof value.checkpoint === 'string' && /^[a-f0-9]{64}$/.test(value.checkpoint)) result.checkpoint = value.checkpoint;
+  if (typeof value.verification_pending === 'boolean') result.verification_pending = value.verification_pending;
   result.complete = value.complete === true;
   result.paused = value.paused === true;
   result.planning_cancelled = value.planning_cancelled === true;
   result.workspace_may_be_incomplete = value.workspace_may_be_incomplete === true;
   result.progress_percent = typeof value.progress_percent === 'number' && Number.isFinite(value.progress_percent) && value.progress_percent >= 0 && value.progress_percent <= 100 ? value.progress_percent : null;
   if (result.phase === 'complete-with-omissions' || result.phase === 'complete-with-notices' || FINDING_COUNTS.some(key => (result[key] || 0) > 0) || result.phase === 'error' || (result.progress_percent === 100 && (result.phase !== 'complete' || !result.complete || result.paused)) || (result.omitted_units || 0) > 0) result.progress_percent = null;
+  if (result.verification_pending) {
+    for (const key of FINDING_COUNTS) delete result[key];
+    delete result.omitted_units; result.complete = false; result.progress_percent = null;
+  }
   return result;
 }
 module.exports = {sanitizeProgress};

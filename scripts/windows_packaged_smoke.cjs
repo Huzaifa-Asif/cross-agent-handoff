@@ -3,6 +3,7 @@
 // documented dialog API, without adding production IPC or changing OS settings.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
+const {createReadStream} = require('node:fs');
 const path = require('node:path');
 const {createHash} = require('node:crypto');
 async function capture(page, evidence, name) {
@@ -12,6 +13,33 @@ async function capture(page, evidence, name) {
   const count = Math.ceil(data.length / 4096);
   console.log(JSON.stringify({handoffScreenshot:name,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),chunks:count}));
   for(let index=0;index<count;index++) console.log(JSON.stringify({handoffScreenshot:name,index,data:data.slice(index*4096,(index+1)*4096)}));
+}
+async function packageManifest(root) {
+  const files=[]; let total=0,actualTotal=0,visited=0;
+  async function visit(directory,depth) {
+    assert.ok(depth<=12,'Bounded package directory depth');
+    for(const name of (await fs.readdir(directory)).sort()) {
+      assert.ok(++visited<=4096,'Bounded package entries');
+      const file=path.join(directory,name), info=await fs.lstat(file);
+      assert.ok(!info.isSymbolicLink(),'Package manifest refuses symbolic links');
+      if(info.isDirectory()){await visit(file,depth+1);continue;}
+      assert.ok(info.isFile(),'Ordinary package files only');
+      assert.ok(files.length<2048 && info.size<=536870912,'Bounded package file count and size');
+      total+=info.size; assert.ok(total<=1073741824,'Bounded total package bytes');
+      const hash=createHash('sha256'); let actual=0;
+      for await(const chunk of createReadStream(file)){
+        actual+=chunk.length;actualTotal+=chunk.length;
+        assert.ok(actual<=536870912 && actualTotal<=1073741824,'Bounded bytes actually read');
+        hash.update(chunk);
+      }
+      assert.equal(actual,info.size,'Package file size changed while hashing');
+      const after=await fs.lstat(file);
+      assert.ok(after.isFile() && !after.isSymbolicLink(),'Package entry changed type');
+      assert.deepEqual([after.dev,after.ino,after.size,after.mtimeMs],[info.dev,info.ino,info.size,info.mtimeMs],'Package entry changed while hashing');
+      files.push({file:path.relative(root,file).split(path.sep).join('/'),bytes:info.size,sha256:hash.digest('hex')});
+    }
+  }
+  await visit(root,0);return files;
 }
 async function main() {
   assert.equal(process.platform, 'win32', 'Run the packaged application on real Windows');
@@ -30,6 +58,12 @@ async function main() {
     await page.waitForFunction(async () => (await window.handoff.status()).ready);
     const ready = await page.evaluate(() => window.handoff.status());
     assert.equal(ready.platform,'win32');
+    assert.equal(await page.getByRole('button',{name:'Task Hand Off',exact:true}).count(),1);
+    assert.equal(await page.getByRole('button',{name:'Full Migration',exact:true}).count(),1);
+    await page.locator('#local-help summary').press('Enter');
+    assert.equal(await page.locator('#local-help').getAttribute('open'),'');
+    assert.match(await page.locator('#setup-help').innerText(),/Local runtime ready/);
+    await page.locator('#local-help summary').press('Enter');
     const choose = async (file, open=false) => app.evaluate(({dialog},{file,open}) => {
       if(open) dialog.showOpenDialog = async () => ({canceled:false,filePaths:[file]});
       else dialog.showSaveDialog = async () => ({canceled:false,filePath:file});
@@ -49,10 +83,16 @@ async function main() {
     await page.locator('#migration-tab').click();
     await page.locator('#source-provider').selectOption('generic');
     await page.locator('#source-format').selectOption('generic-json');
+    await page.locator('#source-provider').selectOption('claude');
+    assert.equal(await page.locator('#source-format').inputValue(),'generic-json');
+    assert.match(await page.locator('#format-choice').innerText(),/choice is kept/);
+    await page.locator('#source-provider').selectOption('generic');
+    assert.match(await page.locator('#format-guidance').innerText(),/Generic JSON/);
     await choose(source,true); await page.locator('#choose-source').click(); await idle();
     await choose(workspace); await page.locator('#choose-workspace').click(); await idle();
     await page.locator('#confirm-migration').check();
     await page.locator('#plan-migration').click(); await idle();
+    assert.match(await page.locator('#records').innerText(),/Processing has not started/);
     await capture(page,evidence,'windows-planned');
     // Reopen the durable plan through the user-facing resume path.
     await page.locator('#new-migration').click();
@@ -72,8 +112,8 @@ async function main() {
     await page.locator('#verify-export').click(); await idle();
     assert.match(await page.locator('#status-message').innerText(),/^2500 portable files verified/);
     await capture(page,evidence,'windows-complete');
-    const result = {platform:process.platform,executablePath,ready,records:recordCount,verifiedFiles:recordCount*2,
-      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','reference export','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export'],
+    const result = {platform:process.platform,executablePath,ready,records:recordCount,verifiedFiles:recordCount*2,packageFiles:await packageManifest(path.dirname(executablePath)),
+      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','reference export','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state'],
       gaps:['OS file picker uses documented synthetic dialog stubs','no signing or installer/SmartScreen validation','screenshots require human inspection; CI save alone is not visual review']};
     await fs.writeFile(path.join(evidence,'validation.json'),JSON.stringify(result,null,2));
     console.log(JSON.stringify(result));
