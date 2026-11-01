@@ -1,0 +1,515 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task handoff schema 2.0",
+  "$comment": "Runtime validation additionally rejects duplicate JSON keys, unpaired Unicode surrogates, nonfinite numbers, files or canonical bundles over 1 MiB, and expiration before creation. Format assertion must be enabled. JSON Schema integer semantics may accept 1.0, whereas the runtime requires JSON integer tokens.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}(?![\\s\\S])"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "parent_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}(?![\\s\\S])"
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z(?![\\s\\S])",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z(?![\\s\\S])",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "maxLength": 32768,
+          "minLength": 1
+        },
+        "actor": {
+          "type": "string",
+          "maxLength": 32768,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "provider",
+        "actor"
+      ],
+      "additionalProperties": false
+    },
+    "repository": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "url": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32768
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "branch": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32768
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "commit": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})(?![\\s\\S])"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dirty": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "url",
+            "branch",
+            "commit",
+            "dirty"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "goal": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "scope": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rejected_alternatives": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "risks": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "next_steps": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "dirty_changes": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "files": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 32768,
+            "minLength": 1,
+            "pattern": "^(?!/)(?![\\s\\S]*[\\\\\\u0000:])(?![\\s\\S]*(?:^|/)(?:\\.|\\.\\.)(?:/|(?![\\s\\S])))[^/]+(?:/[^/]+)*(?![\\s\\S])"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "required": [
+          "path",
+          "description"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "tests": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "unrun"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "required": [
+          "command",
+          "status",
+          "detail"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 32768,
+            "minLength": 1,
+            "pattern": "^(?!/)(?![\\s\\S]*[\\\\\\u0000:])(?![\\s\\S]*(?:^|/)(?:\\.|\\.\\.)(?:/|(?![\\s\\S])))[^/]+(?:/[^/]+)*(?![\\s\\S])"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}(?![\\s\\S])"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "omissions": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 32768,
+            "minLength": 2,
+            "pattern": "^/(?:[^~]|~[01])+(?![\\s\\S])"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "required": [
+          "path",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "domain": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "context": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "preferences": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "inferred",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "revision",
+    "created_at",
+    "expires_at",
+    "source",
+    "goal"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/Huzaifa-Asif/cross-agent-handoff/blob/main/docs/schema-v2.json"
+}

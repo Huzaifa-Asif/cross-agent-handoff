@@ -88,6 +88,8 @@ def digest(bundle):
 
 
 def validate(bundle):
+    if type(bundle) is dict and bundle.get('schema_version') == '2.0':
+        return validate_task(bundle)
     keys(bundle, ('schema_version', 'id', 'revision', 'created_at', 'expires_at', 'source',
                   'repository', *EVIDENCE_FIELDS, 'files', 'tests', 'artifacts', 'omissions'),
          ('parent_digest',))
@@ -140,6 +142,47 @@ def validate(bundle):
                 string(record['reason'])
     require(len(canonical(bundle)) <= MAX_BYTES, 'bundle exceeds size limit')
     return bundle
+
+
+def validate_task(bundle):
+    """Business-friendly task context; code fields are optional, not fabricated."""
+    keys(bundle, ('schema_version', 'id', 'revision', 'created_at', 'expires_at', 'source', 'goal'),
+         ('parent_digest', 'domain', 'context', 'preferences', 'repository',
+          *[field for field in EVIDENCE_FIELDS if field != 'goal'],
+          'files', 'tests', 'artifacts', 'omissions'))
+    legacy = copy.deepcopy(bundle)
+    legacy['schema_version'] = '1.0'
+    for field in EVIDENCE_FIELDS + ('files', 'tests', 'artifacts', 'omissions'):
+        legacy.setdefault(field, [])
+    if legacy.get('repository') is None:
+        legacy['repository'] = {'url': None, 'branch': None, 'commit': None, 'dirty': False}
+    for field in ('domain', 'context', 'preferences'):
+        if field in legacy:
+            value = legacy.pop(field)
+            if field == 'domain':
+                string(value, field)
+            else:
+                array(value)
+                for entry in value:
+                    keys(entry, ('text', 'status'))
+                    string(entry['text'])
+                    require(entry['status'] in ('verified', 'inferred', 'missing'), 'invalid evidence status')
+    validate(legacy)
+    require(len(canonical(bundle)) <= MAX_BYTES, 'bundle exceeds size limit')
+    return bundle
+
+
+def new_task(goal, provider, domain='general', context=(), preferences=()):
+    import uuid
+    string(goal)
+    require(bool(goal.strip()), 'goal must be nonempty')
+    return validate({'schema_version': '2.0', 'id': str(uuid.uuid4()), 'revision': 1,
+                     'created_at': datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'),
+                     'expires_at': None, 'source': {'provider': provider, 'actor': 'user'},
+                     'domain': domain, 'goal': [{'text': goal, 'status': 'inferred'}],
+                     'context': [{'text': text, 'status': 'inferred'} for text in context],
+                     'preferences': [{'text': text, 'status': 'inferred'} for text in preferences],
+                     'next_steps': [], 'omissions': []})
 
 
 def parse_json(data):
@@ -212,13 +255,15 @@ def import_markdown(data):
         raise HandoffError('invalid UTF-8') from exc
     if document.startswith(CUSTOM_HEADER + '\n'):
         label = re.match(re.escape(CUSTOM_HEADER) + r'\n\nCustom target label: ([a-z][a-z0-9-]{0,63})\n', document)
-        require(label is not None, 'invalid custom target label')
+        if label is None:
+            raise HandoffError('invalid custom target label')
         target = label[1]
         prefix = custom_header(target)
         require(document.startswith(prefix), 'malformed custom handoff envelope')
         rest = document[len(prefix):]
         match = re.fullmatch(r'(`{3,})json\n(.*?)\n\1\n', rest, flags=re.DOTALL)
-        require(match is not None, 'malformed handoff envelope')
+        if match is None:
+            raise HandoffError('malformed handoff envelope')
         bundle = parse_json(match[2].encode('utf-8'))
         require(export_custom_markdown(bundle, target) == document, 'noncanonical handoff envelope')
         return bundle
@@ -227,7 +272,8 @@ def import_markdown(data):
         if document.startswith(prefix):
             rest = document[len(prefix):]
             match = re.fullmatch(r'(`{3,})json\n(.*?)\n\1\n', rest, flags=re.DOTALL)
-            require(match is not None, 'malformed handoff envelope')
+            if match is None:
+                raise HandoffError('malformed handoff envelope')
             bundle = parse_json(match[2].encode('utf-8'))
             require(export_markdown(bundle, provider) == document, 'noncanonical handoff envelope')
             return bundle
@@ -247,7 +293,7 @@ def compare(current, incoming):
         return 'divergent'
     if incoming['revision'] != current['revision'] + 1:
         return 'revision-gap'
-    if current['repository'] != incoming['repository']:
+    if current.get('repository') != incoming.get('repository'):
         return 'successor-repository-changed'
     return 'successor'
 
@@ -269,16 +315,18 @@ def redact(bundle, pointers):
             _, field, leaf = pointer.split('/')
             result[field][leaf] = '[REDACTED]'
         elif pointer in ('/repository/url', '/repository/branch', '/repository/commit'):
+            require(type(result.get('repository')) is dict, 'task has no repository field')
             _, field, leaf = pointer.split('/')
             result[field][leaf] = None
         else:
-            require(bool(re.fullmatch(r'/(?:' + '|'.join(EVIDENCE_FIELDS) + r')/(?:0|[1-9][0-9]*)/text|/files/(?:0|[1-9][0-9]*)/description|/tests/(?:0|[1-9][0-9]*)/(?:command|detail)', pointer)), 'pointer is not a redactable field')
+            fields = EVIDENCE_FIELDS + (('context', 'preferences') if bundle['schema_version'] == '2.0' else ())
+            require(bool(re.fullmatch(r'/(?:' + '|'.join(fields) + r')/(?:0|[1-9][0-9]*)/text|/files/(?:0|[1-9][0-9]*)/description|/tests/(?:0|[1-9][0-9]*)/(?:command|detail)', pointer)), 'pointer is not a redactable field')
             _, field, index, leaf = pointer.split('/')
-            require(int(index) < len(result[field]), 'pointer index out of range')
+            require(field in result and int(index) < len(result[field]), 'pointer index out of range')
             result[field][int(index)][leaf] = '[REDACTED]'
-            if field in EVIDENCE_FIELDS:
+            if field in fields:
                 result[field][int(index)]['status'] = 'missing'
-        result['omissions'].append({'path': pointer, 'reason': 'Explicit user-selected redaction'})
+        result.setdefault('omissions', []).append({'path': pointer, 'reason': 'Explicit user-selected redaction'})
     result['revision'] += 1
     result['parent_digest'] = digest(bundle)
     return validate(result)
@@ -367,8 +415,20 @@ def purge_file(path):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == 'migrate':
+        from migration import main as migration_main
+        return migration_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
+    new = sub.add_parser('new', help='start a task handoff without repository or code fields')
+    new.add_argument('--goal', required=True)
+    new.add_argument('--provider', required=True)
+    new.add_argument('--domain', default='general')
+    new.add_argument('--context', action='append', default=[])
+    new.add_argument('--preference', action='append', default=[])
+    new.add_argument('--output', required=True)
+    sub.add_parser('migrate', help='explicit long-term migration: run migrate --help')
     for name in ('validate', 'inspect'):
         sub.add_parser(name).add_argument('input')
     exp = sub.add_parser('export')
@@ -397,7 +457,9 @@ def main(argv=None):
     purge.add_argument('--confirm', action='store_true', required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command == 'purge':
+        if args.command == 'new':
+            write_file(args.output, canonical(new_task(args.goal, args.provider, args.domain, args.context, args.preference)) + b'\n')
+        elif args.command == 'purge':
             purge_file(args.input)
             print('Removed named file (not secure erasure).')
         elif args.command == 'compare':

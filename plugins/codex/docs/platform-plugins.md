@@ -1,12 +1,12 @@
-# Cross-Agent Handoff host plugins (0.4.1)
+# Cross-Agent Handoff host plugins (1.0.0)
 
-The Codex, Claude Code and Cursor packages expose the same local, stateless MCP tools and a guided handoff skill. They help an assistant prepare and inspect explicitly supplied context; they do not fetch hidden histories, transfer code files, call another vendor, or migrate native sessions. The standalone manual CLI remains available.
+The Codex, Claude Code and Cursor packages expose the same local, stateless MCP tools and a guided handoff skill. They help an assistant prepare and inspect explicitly supplied context; they do not fetch hidden histories, transfer code files, call another vendor, or migrate native sessions. The CLI/desktop also offer a separate explicit migration workflow; MCP tools do not scan or migrate account histories. See [migration coverage](migration.md). The standalone manual CLI remains available.
 
 **Distribution status:** packages built and tested as documented in the release evidence are not proof of installation in a real host or public directory approval. GitHub distribution, host installation, directory submission, review and publication are separate milestones. This document does not claim any directory listing.
 
 ## Requirements and privacy
 
-Python 3.11+ must already be available as `python3` on the executing machine. Current native host UI flows are unrun unless separately recorded. The v0.4.0 baseline passed Ubuntu/macOS CI on Python 3.11–3.13 and local macOS Python 3.14 tests. The v0.4.1 checkpoint records patch-specific checks; Windows remains unverified. No third-party runtime dependency, API key, network endpoint, account or paid hosting is required by the server. Your host subscription and policies are separate.
+Python 3.11+ must already be available as `python3` on the executing machine. Current native host UI flows are unrun unless separately recorded. The v0.4.0 baseline passed Ubuntu/macOS CI on Python 3.11–3.13 and local macOS Python 3.14 tests. The current CHECKPOINT.md records release-specific checks; Windows remains unverified. No third-party runtime dependency, API key, network endpoint, account or paid hosting is required by the server. Your host subscription and policies are separate.
 
 The server accepts inline JSON/Markdown only, uses no files or network, and retains no application state after a request. The host receives arguments and results and can send or retain them under its policies. This is **not** a guarantee that your model provider never sees handoff content. Review every field and get authorization before cross-provider sharing. See [privacy](privacy.md) and [security](../SECURITY.md).
 
@@ -15,7 +15,7 @@ The server accepts inline JSON/Markdown only, uses no files or network, and reta
 From the repository root:
 
 ```sh
-python3 scripts/build_plugins.py --output dist/plugins-0.4.1
+python3 scripts/build_plugins.py --output dist/plugins-1.0.0
 ```
 
 The output directory must not exist. Choose a new directory for another build. It contains three standalone ZIPs, expanded `plugins/codex`, `plugins/claude` and `plugins/cursor` directories, host marketplace catalogs and `manifest.json` with file counts and SHA-256 values. All runtime copies come from the same source files. There are no symlinks, executable hooks, installer scripts or credentials.
@@ -27,7 +27,7 @@ Inspect a ZIP before extracting it to a directory you choose. Generated archives
 After reviewing the generated marketplace, run:
 
 ```sh
-codex plugin marketplace add /absolute/path/to/dist/plugins-0.4.1
+codex plugin marketplace add /absolute/path/to/dist/plugins-1.0.0
 ```
 
 Open the ChatGPT desktop app's Plugins Directory, select `huzaifa-cross-agent-handoff`, install `cross-agent-handoff`, and test in a new local-execution thread. Follow host trust/permission prompts; do not disable them. An isolated Codex CLI 0.166.0-alpha.1 marketplace add, plugin add and plugin list smoke test passed using a disposable CODEX_HOME, without accessing a user account or invoking a model. That verifies CLI package discovery/installation, not the desktop UI or a model-driven workflow. The Codex package uses root `plugin.json`, `mcp.json` and the built-in `${PLUGIN_ROOT}` variable. The server starts with `python3 -B` to avoid bytecode cache writes.
@@ -39,14 +39,14 @@ This local marketplace is not the universal public directory. OpenAI's current d
 For a session-only test, run:
 
 ```sh
-claude --plugin-dir /absolute/path/to/dist/plugins-0.4.1/plugins/claude
+claude --plugin-dir /absolute/path/to/dist/plugins-1.0.0/plugins/claude
 ```
 
 For marketplace distribution, validate before installation:
 
 ```sh
-claude plugin validate /absolute/path/to/dist/plugins-0.4.1/plugins/claude --strict
-claude plugin marketplace add /absolute/path/to/dist/plugins-0.4.1
+claude plugin validate /absolute/path/to/dist/plugins-1.0.0/plugins/claude --strict
+claude plugin marketplace add /absolute/path/to/dist/plugins-1.0.0
 claude plugin install cross-agent-handoff@huzaifa-cross-agent-handoff
 ```
 
@@ -65,7 +65,7 @@ For a direct local MCP test without installing the plugin, merge this server ent
   "mcpServers": {
     "cross-agent-handoff": {
       "command": "python3",
-      "args": ["-B", "/absolute/path/to/dist/plugins-0.4.1/plugins/cursor/handoff_mcp.py"]
+      "args": ["-B", "/absolute/path/to/dist/plugins-1.0.0/plugins/cursor/handoff_mcp.py"]
     }
   }
 }

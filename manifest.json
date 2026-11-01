@@ -1,20 +1,20 @@
 {
   "codex": {
-    "archive": "cross-agent-handoff-0.4.1-codex.zip",
-    "files": 12,
-    "bytes": 20677,
-    "sha256": "fabc189ffa68778daf55ca9f747a90f55b9ed4523a0f31836a688d47f0386455"
+    "archive": "cross-agent-handoff-1.0.0-codex.zip",
+    "files": 17,
+    "bytes": 44001,
+    "sha256": "ff09bc0810f49017f20dd7442607ba6eea2db3677122e90a0413e36f8e3c147e"
   },
   "claude": {
-    "archive": "cross-agent-handoff-0.4.1-claude.zip",
-    "files": 12,
-    "bytes": 20584,
-    "sha256": "886d8aab518f7f5e61dfeeb84b8ef1dc72bbc3e2ff5a17c59fdcc82c00724b23"
+    "archive": "cross-agent-handoff-1.0.0-claude.zip",
+    "files": 17,
+    "bytes": 43911,
+    "sha256": "84c08c84ed4f94ac8dfb6bfe77da619ebd2a28c7e839ee006db6e2ecf974d603"
   },
   "cursor": {
-    "archive": "cross-agent-handoff-0.4.1-cursor.zip",
-    "files": 12,
-    "bytes": 20582,
-    "sha256": "559fb3dff41c5cfbb3f31fcfe46a999821ac73cb97190de6410c8c55c5e0ddab"
+    "archive": "cross-agent-handoff-1.0.0-cursor.zip",
+    "files": 17,
+    "bytes": 43909,
+    "sha256": "6a2ca87800fe08cf4647d9788329e11470b88874cdf4b65a007751f6dd24e27a"
   }
 }
