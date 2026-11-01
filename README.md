@@ -26,6 +26,8 @@ You do not need Node, npm, an API key or an AI-account login to use the desktop 
 
 Use this when you want another assistant to continue **one piece of work**. Enter your goal, useful context and preferences, then save the handoff. Choose your next assistant and save a reference document. Read it, then attach or paste it into that assistant yourself. A repository is optional: a campaign brief or operations handover works too.
 
+The unreleased desktop candidate shows the exact saved handoff in a separate read-only review screen. Review its fields and confirm before exporting; if the saved file changed, reopen and review it again. The current published download has not been replaced by this candidate.
+
 ### Full Migration
 
 Use this when you have decided to change your everyday assistant for the long term. First download your history using the provider's official export controls. In this app, select that export and a new local library folder, then confirm the move. Start processing once: the app runs bounded batches automatically and shows progress. You can pause and resume the saved library. Review records and omissions, redact sensitive fields, then export reviewed reference files.

@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const api = window.handoff;
-const state = {task: null, source: null, workspace: null, library: null, record: null, output: null, busy: false, offset: 0, progress: null, paused: false, activeMigration: null, formatTouched: false, recordData: null, redactPage: 0, redactChoices: new Map(), redactPointer: null};
+const state = {task: null, taskDigest: null, taskPages: [], taskPage: 0, source: null, workspace: null, library: null, record: null, output: null, busy: false, offset: 0, progress: null, paused: false, activeMigration: null, formatTouched: false, recordData: null, redactPage: 0, redactChoices: new Map(), redactPointer: null};
 const priorDisabled = new Map();
 function recovery(message) {$('recovery-help').textContent = message;}
 function formatGuidance() {
@@ -53,6 +53,41 @@ async function perform(message, operation) {
     recovery('An operation stopped. Check whether an output was created before retrying. For a saved migration, use Resume library to verify its checkpoint; for an interrupted initial snapshot, choose a fresh folder.');
   }
   finally {state.activeMigration = null; busy(false); update();}
+}
+function clearTaskReview() {
+  state.task=null; state.taskDigest=null; state.taskPages=[]; state.taskPage=0;
+  $('task-review').hidden=true; $('task-create').hidden=false; $('confirm-task-reviewed').checked=false;
+  for (const id of ['task-file','task-metadata','task-expiration','task-goal','task-context','task-preferences','task-content','task-page-label','task-summary-limit']) $(id).textContent='';
+  $('task-all-fields').open=false; $('export-task').disabled=true;
+}
+function renderTaskPage() {
+  $('task-content').textContent=state.taskPages[state.taskPage] || '';
+  $('task-page-label').textContent=`Data page ${state.taskPage+1} of ${state.taskPages.length} · all saved fields included across pages`;
+  $('task-page-previous').disabled=state.taskPage===0;
+  $('task-page-next').disabled=state.taskPage+1>=state.taskPages.length;
+}
+async function inspectTask(selected) {
+  const result=await api.run('task-inspect',{task:selected.handle});
+  if (!result.bundle || typeof result.bundle!=='object' || Array.isArray(result.bundle) || !/^[a-f0-9]{64}$/.test(result.digest)) throw new Error('Saved handoff review is incomplete. Reopen the file before exporting.');
+  const raw=JSON.stringify(result.bundle); let bytes=0,page='',pageBytes=0,pages=[];
+  for (const character of raw) {
+    const code=character.codePointAt(0),size=code<=0x7f?1:code<=0x7ff?2:code<=0xffff?3:4;
+    bytes+=size;if(bytes>1048576) throw new Error('Saved bundle exceeds the 1 MiB review limit. Review it with the CLI; it has not been changed.');
+    if(pageBytes+size>65536){pages.push(page);page='';pageBytes=0;}page+=character;pageBytes+=size;
+  }
+  pages.push(page);
+  state.task=selected;state.taskDigest=result.digest;state.taskPages=pages;state.taskPage=0;
+  $('task-file').textContent=selected.label;
+  $('task-metadata').textContent=`Schema ${result.bundle.schema_version} · revision ${result.revision} · ID ${result.id} · reviewed digest ${result.digest}`;
+  $('task-expiration').textContent=result.expiration==='expired'?'This saved task has expired. Expiry is informational for Task Hand Off: review whether the context is still current before exporting.':`Task expiration: ${result.expiration}. Task expiry is informational; it does not block review or export.`;
+  let truncated=false;
+  for(const [field,id] of [['goal','task-goal'],['context','task-context'],['preferences','task-preferences']]){
+    const values=result.bundle[field];
+    const text=Array.isArray(values) && values.length?values.map(item=>`[${item.status}] ${item.text}`).join('\n\n'):'Not present in this saved handoff.';
+    const preview=clippedText(text,16384,16384).text;truncated ||= preview!==text;$(id).textContent=preview;
+  }
+  $('task-summary-limit').textContent=truncated?'One or more summaries reached the 16 KiB display limit. Use Review all saved fields below for complete content before sharing. The saved file is unchanged.':'Goal, context and preferences above are saved content. Review all saved fields below for decisions, constraints, repository, files, tests, artifacts, omissions and other supplied data.';
+  $('task-create').hidden=true;$('task-review').hidden=false;$('confirm-task-reviewed').checked=false;$('task-all-fields').open=false;renderTaskPage();
 }
 function invalidateExport() {
   state.output = null; $('export-location').textContent = ''; $('verify-export').hidden = true; $('confirm-reviewed').checked = false; $('include-original').checked = false;
@@ -128,7 +163,8 @@ function update() {
   $('redact-record').disabled=!redactionAllowed();
   $('redact-previous').disabled=!state.recordData || state.redactPage===0;
   $('redact-next').disabled=!state.recordData || (state.redactPage+1)*20>=Math.min(Array.isArray(state.recordData.messages)?state.recordData.messages.length:0,50000);
-  $('export-task').disabled = !state.task;
+  $('export-task').disabled = !state.task || !state.taskDigest || !$('confirm-task-reviewed').checked;
+  $('task-page-previous').disabled=state.taskPage===0; $('task-page-next').disabled=state.taskPage+1>=state.taskPages.length;
   const library = state.library;
   if (!library) return;
   $('migration-setup').hidden = true;
@@ -226,24 +262,34 @@ $('task-tab').addEventListener('click', () => screen('task'));
 $('migration-tab').addEventListener('click', () => screen('migration'));
 $('task-form').addEventListener('submit', event => {
   event.preventDefault();
-  perform('Choose where to save this focused handoff…', async () => {
+  return perform('Choose where to save this focused handoff…', async () => {
+    clearTaskReview();
     const output = await api.choose('task-output'); if (!output) return status('Save cancelled. No file was created.');
     const result = await api.run('task-new', {goal: $('goal').value, context: $('context').value, preference: $('preference').value, provider: $('task-provider').value, domain: $('domain').value, output: output.handle});
-    state.task = result.task; $('task-file').textContent = state.task.label;
-    status('Task handoff saved. Review your context, then choose the next assistant and save a reference document.');
+    try {await inspectTask(result.task);} catch(error) {clearTaskReview();throw error;}
+    status('Task saved. Review this exact saved snapshot before choosing the next assistant and exporting.');
   });
 });
 $('open-task').addEventListener('click', () => perform('Select an existing task handoff…', async () => {
-  const selected = await api.choose('task'); if (!selected) return status('Selection cancelled.');
-  const result = await api.run('task-inspect', {task: selected.handle}); state.task = selected;
-  $('task-file').textContent = selected.label;
-  status(`Handoff validated. Revision ${result.revision}; expiration: ${result.expiration}.`);
+  clearTaskReview();
+  const selected = await api.choose('task'); if (!selected) return status('Selection cancelled. No saved task is selected for export.');
+  try {await inspectTask(selected);} catch(error) {clearTaskReview();throw error;}
+  status('Saved task opened for read-only review. The creation form has not been populated or used for export.');
 }));
-$('export-task').addEventListener('click', () => perform('Choose where to save the reference document…', async () => {
-  const output = await api.choose('reference-output'); if (!output) return status('Export cancelled.');
-  await api.run('task-export', {task: state.task.handle, target: $('task-target').value, output: output.handle});
-  status(`Saved ${output.label}. Review it yourself, then explicitly attach or paste it into your next assistant.`);
-}));
+$('new-task').addEventListener('click',()=>{if(state.busy)return;clearTaskReview();status('Create a new task handoff, or open a saved file. Previous review and export selection cleared.');update();});
+$('confirm-task-reviewed').addEventListener('change',()=>{if(!state.busy)update();});
+for(const [id,delta] of [['task-page-previous',-1],['task-page-next',1]]) $(id).addEventListener('click',()=>{
+  if(state.busy || !state.task)return;state.taskPage=Math.max(0,Math.min(state.taskPages.length-1,state.taskPage+delta));renderTaskPage();
+});
+$('export-task').addEventListener('click', () => {
+  if(!state.task || !state.taskDigest || !$('confirm-task-reviewed').checked || state.busy)return;
+  return perform('Choose where to save the reference document…', async () => {
+    const output = await api.choose('reference-output'); if (!output) return status('Export cancelled. The saved snapshot is still selected for review.');
+    try {await api.run('task-export', {task: state.task.handle, digest:state.taskDigest, target: $('task-target').value, output: output.handle});}
+    catch(error) {clearTaskReview();throw new Error(`${error.message || 'Export failed.'} Reopen and review the saved task before another export.`);}
+    status(`Saved ${output.label}. Review it yourself, then explicitly attach or paste it into your next assistant.`);
+  });
+});
 $('choose-source').addEventListener('click', () => perform('Select only the export you intend to migrate…', async () => {
   const selected = await api.choose('source'); if (!selected) return status('Selection cancelled.');
   state.source = selected; $('source-file').textContent = selected.label; status('Export selected. No history is scanned and no processing has started.');

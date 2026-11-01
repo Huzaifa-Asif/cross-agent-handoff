@@ -449,13 +449,17 @@ def main(argv=None):
     new.add_argument('--output', required=True)
     sub.add_parser('migrate', help='explicit long-term migration: run migrate --help')
     for name in ('validate', 'inspect'):
-        sub.add_parser(name).add_argument('input')
+        command = sub.add_parser(name)
+        command.add_argument('input')
+        if name == 'inspect':
+            command.add_argument('--include-content', action='store_true', help='include the complete validated bundle as read-only reference data')
     exp = sub.add_parser('export')
     exp.add_argument('input')
     target = exp.add_mutually_exclusive_group(required=True)
     target.add_argument('--provider', choices=PROVIDERS)
     target.add_argument('--custom-target', help='unverified label for a generic manual document, not a native integration')
     exp.add_argument('--output', required=True)
+    exp.add_argument('--expected-digest', help='export only if the parsed bundle matches this reviewed SHA-256')
     imp = sub.add_parser('import')
     imp.add_argument('input')
     imp.add_argument('--output', required=True)
@@ -494,8 +498,14 @@ def main(argv=None):
         else:
             bundle = parse_json(read_file(args.input))
             if args.command in ('validate', 'inspect'):
-                print(json.dumps({'id': bundle['id'], 'revision': bundle['revision'], 'digest': digest(bundle), 'expiration': expiration(bundle)}, sort_keys=True))
+                result = {'id': bundle['id'], 'revision': bundle['revision'], 'digest': digest(bundle), 'expiration': expiration(bundle)}
+                if args.command == 'inspect' and args.include_content:
+                    result['bundle'] = bundle
+                print(json.dumps(result, sort_keys=True))
             elif args.command == 'export':
+                if args.expected_digest is not None:
+                    digest_string(args.expected_digest)
+                    require(digest(bundle) == args.expected_digest, 'handoff changed; inspect and review it again before exporting')
                 document = (export_custom_markdown(bundle, args.custom_target)
                             if args.custom_target is not None else export_markdown(bundle, args.provider))
                 write_file(args.output, document.encode('utf-8'))

@@ -78,8 +78,59 @@ async function main() {
     await page.locator('#domain').selectOption('marketing');
     await choose(task); await page.locator('#task-form button[type=submit]').click(); await idle();
     assert.match(await fs.readFile(task,'utf8'),/Customer campaign 日本語 🚀/);
+    assert.equal(await page.locator('#task-create').isHidden(),true);
+    assert.match(await page.locator('#task-goal').innerText(),/Customer campaign 日本語 🚀/);
+    assert.match(await page.locator('#task-context').innerText(),/Budget approval pending/);
+    assert.equal(await page.locator('#export-task').isDisabled(),true);
+    await page.locator('#task-all-fields summary').press('Enter');
+    assert.deepEqual(JSON.parse(await page.locator('#task-content').innerText()),JSON.parse(await fs.readFile(task,'utf8')));
+    await page.locator('#task-all-fields summary').press('Enter');
+    await page.locator('#confirm-task-reviewed').check();
     await choose(reference); await page.locator('#export-task').click(); await idle();
     assert.match(await fs.readFile(reference,'utf8'),/Customer campaign 日本語 🚀/);
+    const developerTask=path.join(evidence,'developer-task.json'),developerReference=path.join(evidence,'developer-task.md');
+    const staleReference=path.join(evidence,'stale-must-not-exist.md'),recoveredReference=path.join(evidence,'reviewed-again.md');
+    const marker=path.join(evidence,'NEVER_EXECUTE');
+    const developer=JSON.parse(await fs.readFile(path.resolve(__dirname,'../examples/example.json'),'utf8'));
+    developer.goal[0].text='Developer context 日本語 🚀 <script>inert</script>';
+    developer.expires_at=developer.created_at;
+    developer.tests[0].command='$(touch '+marker+')';
+    await fs.writeFile(developerTask,JSON.stringify(developer));
+    await page.locator('#new-task').click();
+    await choose(developerTask,true); await page.locator('#open-task').click(); await idle();
+    assert.equal(await page.locator('#task-create').isHidden(),true);
+    assert.match(await page.locator('#task-goal').innerText(),/Developer context 日本語 🚀 <script>inert<\/script>/);
+    assert.match(await page.locator('#task-expiration').innerText(),/expired.*informational/);
+    await page.locator('#task-all-fields summary').press('Enter');
+    assert.deepEqual(JSON.parse(await page.locator('#task-content').innerText()),developer);
+    await page.locator('#task-all-fields summary').press('Enter');
+    await page.locator('#task-review-title').evaluate(element=>element.scrollIntoView({block:'start'}));
+    await capture(page,evidence,'windows-task-review');
+    await page.locator('#confirm-task-reviewed').check();
+    await choose(developerReference); await page.locator('#export-task').click(); await idle();
+    assert.match(await fs.readFile(developerReference,'utf8'),/report\.txt/);
+    await assert.rejects(fs.access(marker),{code:'ENOENT'});
+    developer.goal[0].text='Changed outside the reviewed snapshot';
+    const changedBytes=JSON.stringify(developer);await fs.writeFile(developerTask,changedBytes);
+    await choose(staleReference); await page.locator('#export-task').click();
+    await page.locator('#cancel-operation').waitFor({state:'hidden'});
+    assert.equal(await page.locator('#status-box').evaluate(element=>element.classList.contains('error')),true);
+    assert.match(await page.locator('#status-message').innerText(),/handoff changed.*Reopen and review/);
+    assert.equal(await page.locator('#task-review').isHidden(),true);
+    assert.equal(await page.locator('#export-task').isDisabled(),true);
+    await assert.rejects(fs.access(staleReference),{code:'ENOENT'});
+    assert.equal(await fs.readFile(developerTask,'utf8'),changedBytes);
+    await choose(developerTask,true); await page.locator('#open-task').click(); await idle();
+    assert.match(await page.locator('#task-goal').innerText(),/Changed outside the reviewed snapshot/);
+    assert.equal(await page.locator('#confirm-task-reviewed').isChecked(),false);
+    await page.locator('#confirm-task-reviewed').check();
+    await choose(recoveredReference); await page.locator('#export-task').click(); await idle();
+    assert.match(await fs.readFile(recoveredReference,'utf8'),/Changed outside the reviewed snapshot/);
+    await page.locator('#new-task').click();
+    await app.evaluate(({dialog})=>{dialog.showOpenDialog=async()=>({canceled:true,filePaths:[]});});
+    await page.locator('#open-task').click(); await idle();
+    assert.equal(await page.locator('#task-review').isHidden(),true);
+    assert.equal(await page.locator('#export-task').isDisabled(),true);
     await page.locator('#migration-tab').click();
     await page.locator('#source-provider').selectOption('generic');
     await page.locator('#source-format').selectOption('generic-json');
@@ -122,6 +173,7 @@ async function main() {
     assert.deepEqual(await fs.readFile(path.join(workspace,'checkpoint.json')),checkpointBefore,
       'Selecting a guided field must not mutate the library');
     assert.match(await page.locator('#redact-warning').innerText(),/Existing portable exports are unchanged/);
+    await page.locator('#record-review').scrollIntoViewIfNeeded();
     await capture(page,evidence,'windows-redaction-selection');
     await page.locator('#redact-record').click(); await idle();
     assert.equal(await page.locator('#redaction-count').innerText(),'1');
@@ -149,7 +201,7 @@ async function main() {
     await assert.rejects(fs.access(path.join(redactedOutput,'original-export.bin')),{code:'ENOENT'});
     await capture(page,evidence,'windows-complete');
     const result = {platform:process.platform,executablePath,ready,records:recordCount,verifiedFiles:recordCount*2,packageFiles:await packageManifest(path.dirname(executablePath)),
-      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','reference export','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state','explicit guided redaction','selection does not apply','old exports/revisions/snapshot unchanged','new redacted export verified','raw source excluded after redaction'],
+      checks:['packaged executable startup','Python discovery','Unicode Task Hand Off','business and developer saved snapshots preserve all fields','separate creation and read-only review','explicit task review confirmation','informational task expiry','digest-bound reference export','stale source rejected without output','reopen and review recovery','cancelled open clears prior task','Full Migration plan','durable reopen','automatic Full Migration batches','verified portable export','exact mode accessibility labels','keyboard setup help','explicit format retained across provider changes','honest zero-record ready state','explicit guided redaction','selection does not apply','old exports/revisions/snapshot unchanged','new redacted export verified','raw source excluded after redaction'],
       gaps:['OS file picker uses documented synthetic dialog stubs','no signing or installer/SmartScreen validation','screenshots require human inspection; CI save alone is not visual review']};
     await fs.writeFile(path.join(evidence,'validation.json'),JSON.stringify(result,null,2));
     console.log(JSON.stringify(result));

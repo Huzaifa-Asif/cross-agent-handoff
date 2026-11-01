@@ -19,7 +19,13 @@
 
 Tool version 1.0.0 accepts task `schema_version` 1.0 and 2.0. `new_task(goal, provider, domain, context, preferences)` creates schema 2.0 with optional code fields. Unknown keys/versions are errors, not ignored extensions. A future provider-specific adapter must preserve the full neutral object, use explicit activation, provide an official-source capability record and pass round-trip tests. Generic v2 target labels do not establish provider-specific capability; they carry only unverified routing presentation. Import returns the bundle without the label. Old releases do not parse v2; the new release continues parsing frozen v1 built-in envelopes. Native provider transcripts and archive formats need separate design/review; do not overload this parser.
 
-All evidence collections have at most 256 records; text at most 32,768 Unicode characters; serialized inputs and outputs at most 1 MiB. Pretty Markdown overhead means a JSON bundle near the maximum may validate but fail export. That is a checked failure, not truncation. For long context, summarize explicitly and record omissions; this tool does not silently trim it.
+All evidence collections have at most 256 records; text at most 32,768 Unicode characters; task JSON and exported Markdown inputs/outputs at most 1 MiB. Pretty Markdown overhead means a JSON bundle near the maximum may validate but fail export. That is a checked failure, not truncation. For long context, summarize explicitly and record omissions; this tool does not silently trim it.
+
+## Saved-task CLI review
+
+`inspect FILE` and `validate FILE` keep their metadata-only JSON output: `id`, `revision`, `digest` and `expiration`. Only `inspect FILE --include-content` adds `bundle`, the complete validated schema 1.0 or 2.0 object from the same read. It does not fill missing optional fields, convert schemas, redact data or modify the file. `validate` rejects `--include-content`. This opt-in JSON transport includes metadata and Unicode escaping, so its byte length can exceed the 1 MiB bundle limit; the bundle itself remains bounded and is never truncated.
+
+`export FILE --expected-digest SHA256` optionally requires an exact lowercase 64-character canonical SHA-256 from the reviewed snapshot. Both built-in `--provider` and generic `--custom-target` exports check the same already-parsed bundle before rendering or creating output. A malformed digest or changed content exits 2 without creating or changing the destination. Formatting-only changes preserve the canonical digest. Omitting the flag preserves the existing export behavior. This is a stale-content guard, not authentication, a file lock or a change to informational Task Hand Off expiry.
 
 ## Migration engine
 

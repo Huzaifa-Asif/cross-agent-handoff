@@ -12,7 +12,9 @@ The Mac app is **unsigned and not notarized**. Do not bypass OS security warning
 
 ## Choose your mode
 
-**Task Hand Off:** describe your goal, context and preferences. Save a handoff, then save a reference document for your next assistant. Review it and explicitly attach or paste it into that assistant. No repository or code is required.
+**Task Hand Off:** describe your goal, context and preferences, then save a handoff. In the candidate, saving or opening a handoff shows a read-only snapshot of that exact saved file; the creation form is hidden and its unsaved draft is never exported. Review the goal, context and preferences, expand **Review all saved fields, including code and provenance** for all other supplied data, confirm review, then save a reference document for your next assistant. Export checks the reviewed digest against the saved file; if the file changed or export fails, reopen and review it. Explicitly attach or paste the reviewed document into your next assistant. No repository or code is required. Choose **Create or open another** to return to the separate creation form.
+
+Task summaries have a 16 KiB display limit per field with a visible truncation notice. The complete validated bundle (up to 1 MiB) remains available as inert JSON in pages of at most 64 KiB, without dropping code fields, provenance, evidence statuses or omissions. Expiry for Task Hand Off is informational: consider whether old context is still useful before sharing; it does not prevent export. This differs from Full Migration expiry, which blocks processing, redaction and export.
 
 **Full Migration:** first download an official export from your current provider. Select that file in the app, choose its parser (or preserve-only mode), choose a new local library folder, and confirm the long-term move. Start processing once: the app runs bounded batches automatically. Review findings, redact selected fields, and save reviewed portable files. You can pause and resume an existing library.
 
@@ -24,7 +26,7 @@ Your files stay local. Full Migration preserves the selected export and availabl
 
 The current candidate offers a guided redaction picker for a title, an entire context/preferences field, or message text. It shows 20 messages per page with clipped text-only previews below 8 KiB in total. Selecting a field does not change data: review the selected field, then apply redaction. The advanced JSON pointer remains available in expandable details. The original export, previous record revisions and existing portable exports remain unchanged; review and save a new portable copy after redaction. This is not secure deletion or automatic secret detection.
 
-Expiry blocks further processing, redaction and export but does not delete originals. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
+Full Migration expiry blocks further processing, redaction and export but does not delete originals. Task Hand Off expiry is informational and shown during review. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
 
 ## Develop or build
 
