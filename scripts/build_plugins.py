@@ -11,7 +11,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 HOSTS = ('codex', 'claude', 'cursor')
 VERSION = '1.0.0'
-COMMON = ('handoff.py', 'handoff_mcp.py', 'migration.py', 'LICENSE', 'SECURITY.md',
+COMMON = ('handoff.py', 'handoff_mcp.py', 'migration.py', 'windows_io.py', 'LICENSE', 'SECURITY.md',
           'examples/example.json', 'examples/business-task.json', 'examples/migration-history.json',
           'docs/schema-v1.json', 'docs/platform-plugins.md',
           'docs/privacy.md', 'docs/migration.md', 'docs/schema-v2.json')

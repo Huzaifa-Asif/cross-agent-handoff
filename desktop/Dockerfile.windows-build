@@ -1,0 +1,20 @@
+FROM node:22-bookworm
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace/desktop
+COPY desktop/package.json desktop/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+
+WORKDIR /workspace
+COPY . .
+RUN python3 -m unittest discover -s tests -p 'test_windows_*.py' -v \
+    && python3 -m unittest discover -s tests -p test_task_review.py -v \
+    && npm --prefix desktop run check \
+    && npm --prefix desktop test
+
+ENV HANDOFF_DESKTOP_OUTPUT=/output
+CMD ["npm", "--prefix", "desktop", "run", "build:windows"]

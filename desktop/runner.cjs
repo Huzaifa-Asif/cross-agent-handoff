@@ -3,21 +3,23 @@ const {spawn} = require('node:child_process');
 const {StringDecoder} = require('node:string_decoder');
 const {sanitizeProgress} = require('./progress.cjs');
 function startProcess(executable, args, options={}) {
-  const process = spawn(executable,args,{shell:false,env:options.env,cwd:options.cwd,stdio:['ignore','pipe','pipe'],windowsHide:true});
+  const cooperative = options.allowPause && (options.platform || global.process.platform) === 'win32';
+  const process = spawn(executable,args,{shell:false,env:cooperative?{...(options.env || global.process.env),HANDOFF_CANCEL_STDIN:'1'}:options.env,cwd:options.cwd,stdio:[cooperative?'pipe':'ignore','pipe','pipe'],windowsHide:true});
+  if (cooperative) process.stdin.on('error',()=>{}); // A worker may finish before a late pause write.
   let cancelled=false, forced=false, closed=false, oversized=false, output='',diagnostics='',lineBuffer='';
   let outputBytes=0,lastProgressAt=0,killTimer=null,readyForPause=!options.allowPause,termSent=false,terminalSeen=false;
-  const sendTerm=()=>{if(!closed && !termSent && !terminalSeen){termSent=true;process.kill('SIGTERM');}};
+  const sendTerm=()=>{if(!closed && !termSent && !terminalSeen){termSent=true;if(cooperative)process.stdin.write('pause\n');else process.kill('SIGTERM');}};
   const decoder={out:new StringDecoder('utf8'),err:new StringDecoder('utf8')};
   const outputLimit=options.outputLimit || 20*1024*1024;
   const finishLine=line=>{
     let event=null;
     if(line.length<=4096){try{event=sanitizeProgress(JSON.parse(line));}catch{/* Non-progress diagnostics are bounded below. */}}
     if(event){
-      if (['complete','complete-with-omissions','planned','paused','error'].includes(event.phase)) terminalSeen=true;
+      if (['complete','complete-with-omissions','complete-with-notices','planned','paused','error'].includes(event.phase)) terminalSeen=true;
       else readyForPause=true;
       if(cancelled && readyForPause) sendTerm();
       const now=Date.now();
-      if(now-lastProgressAt>=100 || ['complete','complete-with-omissions','planned','paused','error'].includes(event.phase)) {
+      if(now-lastProgressAt>=100 || ['complete','complete-with-omissions','complete-with-notices','planned','paused','error'].includes(event.phase)) {
         lastProgressAt=now; options.onProgress?.(event);
       }
     } else if(diagnostics.length<65536) diagnostics+=(line+'\n').slice(0,65536-diagnostics.length);

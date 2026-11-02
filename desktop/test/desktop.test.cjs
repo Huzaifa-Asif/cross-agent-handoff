@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const {spawnSync} = require('node:child_process');
 const {command} = require('../contracts.cjs');
-const python = [process.env.HANDOFF_TEST_PYTHON, '/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3', 'python3'].filter(Boolean).find(p => spawnSync(p, ['-c','import sys;sys.exit(0 if sys.version_info >= (3,11) else 1)']).status === 0);
+const python = require('./python.cjs')();
 const engine = path.resolve(__dirname, '../../handoff.py');
 function invoke(args) {
   const result = spawnSync(python, ['-E', '-s', '-B', engine, ...args], {encoding:'utf8', timeout:20000});
@@ -83,10 +83,11 @@ test('renderer clears stale exports, unredacted previews and search when changin
   const html=fs.readFileSync(path.resolve(__dirname,'../index.html'),'utf8');
   for(const match of html.matchAll(/<([a-z]+)[^>]*\bid="([^"]+)"/g)) nodes.set(match[2],new Element(match[1]));
   const libraries=['A','B']; let progressListener,finishRun,runCalls=0,cancelCalls=0,bRecords=1,bCheckpoint='b'.repeat(64);
-  const library=name=>({checkpoint:name==='A'?'a'.repeat(64):bCheckpoint,processed_units:name==='A'?1:0,total_units:1,normalized_records:name==='A'?1:bRecords,preserved_only_units:0,redactions:0,complete:name==='A',record_offset:0,has_more_records:false,omissions:[],records:[{file:'record-00000-00000.json',kind:'conversation',title:name,messages:1,omissions:[]}]});
+  const library=name=>({migration_id:name==='A'?'11111111-1111-4111-8111-111111111111':'22222222-2222-4222-8222-222222222222',checkpoint:name==='A'?'a'.repeat(64):bCheckpoint,processed_units:name==='A'?1:0,total_units:1,normalized_records:name==='A'?1:bRecords,preserved_only_units:0,redactions:0,complete:name==='A',record_offset:0,has_more_records:false,omissions:[],records:[{file:'record-00000-00000.json',kind:'conversation',title:name,messages:1,omissions:[]}]});
   const api={onProgress:callback=>{progressListener=callback;return()=>{};},cancel:async()=>{cancelCalls++;},status:async()=>({ready:true,version:'1',python:'3.14'}),choose:async kind=>kind==='workspace'?{handle:libraries.shift(),label:'library'}:{handle:'output',label:'old-export'},run:async(action,input)=>{
     if(action==='migration-run'){runCalls++;return new Promise(resolve=>{finishRun=resolve;});}
     if(action==='migration-review')return library(input.workspace);
+    if(action==='migration-export')return{output_created:true,checkpoint:library(input.workspace).checkpoint,records:library(input.workspace).normalized_records,target_label:input.target};
     if(action==='migration-search')return{checkpoint:'a'.repeat(64),matched_records:1,results:[{file:'record-00000-00000.json',preview:'UNREDACTED A'}]};
     if(action==='migration-show')return{messages:[{text:'UNREDACTED A'}]};
     return{};
@@ -111,4 +112,27 @@ test('renderer clears stale exports, unredacted previews and search when changin
   await click('task-tab');assert.equal(nodes.get('migration-screen').hidden,false);await click('new-migration');assert.equal(nodes.get('migration-work').hidden,false);
   documentHandlers.keydown({key:'Escape',preventDefault(){}});assert.equal(cancelCalls,1);documentHandlers.keydown({key:'Escape',preventDefault(){}});assert.equal(cancelCalls,1);bCheckpoint='c'.repeat(64);bRecords=42;finishRun({...library('B'),paused:true});await first;
   assert.match(nodes.get('status-message').textContent,/Paused safely/);assert.equal(nodes.get('process-batch').textContent,'Resume full migration');assert.equal(nodes.get('process-batch').disabled,false);
+  api.run=async()=>({...library('B'),complete:true,record_omissions:2,missing_source_fields:1,intentional_redactions:0,reference_notices:0});
+  await click('refresh-review');
+  assert.match(nodes.get('migration-phase').textContent,/Finished with omissions/);
+  assert.match(nodes.get('migration-phase').textContent,/2 record omissions/);
+  assert.match(nodes.get('migration-phase').textContent,/1 missing source fields/);
+  assert.doesNotMatch(nodes.get('migration-phase').textContent,/100/);
+  assert.equal(nodes.get('progress').hidden,true);assert.equal(nodes.get('record-count').textContent,'42 / 42');
+  api.run=async()=>({...library('B'),complete:true,record_omissions:0,missing_source_fields:1,intentional_redactions:1,reference_notices:0});
+  await click('refresh-review');
+  assert.match(nodes.get('migration-phase').textContent,/Processing finished; review source-data notices/);
+  assert.match(nodes.get('migration-phase').textContent,/0 record omissions/);
+  assert.match(nodes.get('migration-phase').textContent,/1 intentional redactions/);
+  assert.equal(nodes.get('progress').hidden,true);
+  api.run=async()=>({...library('B'),complete:true,record_omissions:0,missing_source_fields:0,intentional_redactions:0,reference_notices:0});
+  await click('refresh-review');assert.equal(nodes.get('progress').value,100);assert.equal(nodes.get('progress').hidden,false);
+
+});
+
+test('workflow navigation names match visible and accessible product labels',()=>{
+ const html=fs.readFileSync(path.resolve(__dirname,'../index.html'),'utf8');
+ assert.match(html,/<button id="task-tab"[^>]*><span aria-hidden="true">01<\/span> Task Hand Off<\/button>/);
+ assert.match(html,/<button id="migration-tab"[^>]*><span aria-hidden="true">02<\/span> Full Migration<\/button>/);
+ assert.doesNotMatch(html,/One task|Move my library/);
 });

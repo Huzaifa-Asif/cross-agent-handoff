@@ -6,6 +6,7 @@ const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {command} = require('./contracts.cjs');
 const {startProcess} = require('./runner.cjs');
+const {environment:runtimeEnvironment, discoverPython} = require('./runtime.cjs');
 const RENDERER_URL = 'handoff://app/index.html';
 protocol.registerSchemesAsPrivileged([{scheme: 'handoff', privileges: {standard: true, secure: true, supportFetchAPI: false, corsEnabled: false}}]);
 let window, child = null, python = null, runtimeVersion = null, closingAllowed = false;
@@ -22,22 +23,15 @@ function resolveHandle(id, kind) {
 function enginePath() {
   return app.isPackaged ? path.join(app.getAppPath(), 'engine', 'handoff.py') : path.join(__dirname, '..', 'handoff.py');
 }
-function environment() {
-  return {PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin', LANG: 'en_US.UTF-8', TMPDIR: app.getPath('temp')};
-}
+function environment() {return runtimeEnvironment(process.platform,process.env,app.getPath('temp'));}
 function capture(executable, args, options = {}) {
   const job = startProcess(executable, args, {...options, env:environment(), cwd:app.getPath('temp')});
   child = job;
   return job.promise.finally(() => {if (child === job) child = null;});
 }
 async function findPython() {
-  for (const candidate of ['/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3']) {
-    if (!fs.existsSync(candidate)) continue;
-    try {
-      const result = JSON.parse(await capture(candidate, ['-E', '-s', '-B', '-c', 'import json,os,sys; print(json.dumps({"version":list(sys.version_info[:3]),"safe":hasattr(os,"O_NOFOLLOW") and hasattr(os,"O_DIRECTORY")}))'], {outputLimit:8192,timeoutMs:5000}));
-      if (result.safe && (result.version[0] === 3 && result.version[1] >= 11)) {python = candidate; runtimeVersion = result.version.join('.'); return;}
-    } catch { /* Try the next documented installed location, never download. */ }
-  }
+  const runtime = await discoverPython(enginePath(),capture);
+  if(runtime){python=runtime.executable;runtimeVersion=runtime.version;}
 }
 async function choose(kind) {
   if (child) throw new Error('Wait for the current operation or cancel it first.');
@@ -55,12 +49,13 @@ async function choose(kind) {
     selected = result.filePath;
     if (fs.existsSync(selected)) throw new Error('Choose a new destination. Existing files and folders are never overwritten.');
   }
-  // Resolve native system path aliases (e.g. /var -> /private/var) for this explicit selection only.
+  // Resolve POSIX system aliases for explicit selections. Preserve Windows path components
+  // so the engine can reject ancestor junctions/reparse points rather than following them here.
   if (['source', 'task', 'workspace'].includes(kind)) {
     const info = fs.lstatSync(selected);
     if (info.isSymbolicLink()) throw new Error('Select a real file or directory, not a symbolic link.');
-    selected = fs.realpathSync.native(selected);
-  } else selected = path.join(fs.realpathSync.native(path.dirname(selected)), path.basename(selected));
+    selected = process.platform === 'win32' ? path.resolve(selected) : fs.realpathSync.native(selected);
+  } else selected = process.platform === 'win32' ? path.resolve(selected) : path.join(fs.realpathSync.native(path.dirname(selected)), path.basename(selected));
   const id = randomUUID();
   handles.set(id, {path: selected, kind: kind === 'new-workspace' ? 'workspace' : kind});
   return {handle: id, label: selected};
@@ -82,7 +77,7 @@ app.whenReady().then(async () => {
   window.webContents.setWindowOpenHandler(() => ({action: 'deny'}));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{role: 'appMenu'}, {role: 'editMenu'}, {role: 'viewMenu', submenu: [{role: 'resetZoom'}, {role: 'zoomIn'}, {role: 'zoomOut'}]}, {role: 'windowMenu'}]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([...(process.platform === 'darwin' ? [{role: 'appMenu'}] : [{label: 'File', submenu: [{role: 'quit'}]}]), {role: 'editMenu'}, {role: 'viewMenu', submenu: [{role: 'resetZoom'}, {role: 'zoomIn'}, {role: 'zoomOut'}]}, {role: 'windowMenu'}]));
   ipcMain.handle('status', event => {assertSender(event); return {ready: Boolean(python), python: runtimeVersion, version: app.getVersion(), platform: process.platform};});
   ipcMain.handle('choose', async (event, kind) => {assertSender(event); return choose(kind);});
   ipcMain.handle('run-engine', async (event, action, input) => {
@@ -90,7 +85,7 @@ app.whenReady().then(async () => {
     if (child) throw new Error('An operation is already running.');
     if (!python) throw new Error('Install Python 3.11 or newer from python.org, then reopen this app. No runtime is downloaded automatically.');
     const args = command(action, input, resolveHandle);
-    const output = await capture(python, ['-E', '-s', '-B', enginePath(), ...args], {
+    const output = await capture(python, ['-X', 'utf8', '-E', '-s', '-B', enginePath(), ...args], {
       allowPause:action === 'migration-run' || action === 'migration-plan',
       onProgress:progress => {if (window && !window.isDestroyed()) window.webContents.send('migration-progress', {...progress, operation:action});}
     });

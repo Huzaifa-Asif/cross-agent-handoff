@@ -1,0 +1,64 @@
+name: Windows candidate validation
+on:
+  push:
+    branches: [feature/windows-desktop]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-engine:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.13']
+    env:
+      PYTHON_MANAGER_AUTOMATIC_INSTALL: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: x64
+      - run: python -m unittest discover -s tests -p test_windows_io.py -v
+      - run: python -m unittest discover -s tests -p test_windows_journeys.py -v
+      - run: python -m unittest discover -s tests -p test_store_retry.py -v
+      - run: python -m unittest discover -s tests -p test_zip_preflight.py -v
+      - run: python -m unittest discover -s tests -p test_normalized_budget.py -v
+      - run: python -m unittest discover -s tests -p test_redaction_retention.py -v
+      - run: python -m unittest discover -s tests -p test_task_review.py -v
+      - run: python -m compileall -q handoff.py migration.py windows_io.py
+  packaged-desktop:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      PYTHON_MANAGER_AUTOMATIC_INSTALL: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: desktop
+      - run: npm run check; if ($LASTEXITCODE) { exit $LASTEXITCODE }; npm test
+        working-directory: desktop
+      - run: npm run build:windows
+        working-directory: desktop
+        env:
+          HANDOFF_DESKTOP_OUTPUT: ${{ runner.temp }}/handoff-windows
+      - run: npm install --prefix "$env:RUNNER_TEMP/handoff-smoke-tools" --ignore-scripts --no-audit --no-fund --package-lock=false playwright-core@1.64.1
+      - run: node scripts/windows_packaged_smoke.cjs "$env:RUNNER_TEMP/handoff-windows/Cross-Agent Handoff-win32-x64/Cross-Agent Handoff.exe" "$env:RUNNER_TEMP/handoff-smoke-tools/node_modules/playwright-core" "$env:RUNNER_TEMP/handoff-smoke-evidence"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cross-agent-handoff-windows-x64-unsigned
+          path: ${{ runner.temp }}/handoff-windows/cross-agent-handoff-1.0.0-windows-x64-unsigned.zip
+          if-no-files-found: error
+          retention-days: 14
+# Standard public-repository runners only. The artifact is unsigned and intended
+# for review before release publication. Bounded synthetic screenshots and hashes
+# remain in public job logs.

@@ -21,6 +21,7 @@
     "handoff.py",
     "handoff_mcp.py",
     "migration.py",
+    "windows_io.py",
     "examples/",
     "docs/",
     "README.md",

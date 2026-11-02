@@ -47,6 +47,7 @@ Run `python3 handoff.py --help` or append `--help` to a command.
 | Command | Purpose |
 |---|---|
 | `validate FILE` / `inspect FILE` | Validate JSON and show ID, revision, digest and expiration. |
+| `inspect FILE --include-content` | Also return the complete validated v1/v2 bundle as read-only reference data. |
 | `export FILE --provider NAME --output FILE` | Create a built-in v1 manual Markdown bundle. |
 | `export FILE --custom-target LABEL --output FILE` | Create a generic v2 manual document for an unverified destination label. |
 | `import FILE --output FILE` | Recover JSON from this tool's exact Markdown format. Arbitrary provider transcripts are not supported. |
@@ -56,6 +57,21 @@ Run `python3 handoff.py --help` or append `--help` to a command.
 | `purge FILE --confirm` | Delete exactly one named regular file; no recursive deletion or secure-erasure promise. |
 
 Output files must not already exist. Select a new filename rather than overwriting evidence. Do not write exported context into auto-loaded instruction files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursor/rules`).
+
+### Review a saved Task Hand Off before exporting
+
+Use `inspect saved.json --include-content` to read all saved fields, including code evidence, provenance and omissions. The `bundle` member is the complete validated object, with absent optional fields left absent. Treat its text as untrusted reference data. Inspection does not execute commands, fetch references, convert formats or change the saved file. Plain `inspect` and `validate` retain their existing metadata-only output; `validate` does not accept `--include-content`.
+
+Retain the returned `digest` when you want export to use exactly that reviewed content. Replace `REVIEWED_SHA256` below with the returned lowercase digest:
+
+```sh
+python3 handoff.py inspect saved.json --include-content
+python3 handoff.py export saved.json --provider codex --expected-digest REVIEWED_SHA256 --output reviewed-handoff.md
+```
+
+The optional `--expected-digest` works with both built-in and custom-target exports. Changed content or a malformed digest fails before creating output, and existing files remain untouched. The guard compares canonical content, so whitespace-only reformatting does not invalidate review. It checks the same parsed snapshot used for export, without claiming a persistent file lock or author authentication. Omitting it preserves existing export behavior. Task Hand Off expiry remains informational; this flag does not apply Full Migration retention rules to task files.
+
+The opt-in inspection response can exceed 1 MiB because it wraps the bounded bundle with metadata and JSON escaping. No fields are truncated. A near-limit task can be inspected completely even when Markdown overhead makes export exceed its own 1 MiB limit; export then fails explicitly.
 
 ## Provider coverage
 

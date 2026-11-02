@@ -29,10 +29,10 @@ function command(action, input, resolve) {
       return args;
     }
     case 'task-inspect':
-      object(input, ['task']); return ['inspect', handle('task', 'task')];
+      object(input, ['task']); return ['inspect', handle('task', 'task'), '--include-content'];
     case 'task-export':
-      object(input, ['task', 'target', 'output']);
-      return ['export', handle('task', 'task'), '--provider', choice(input.target, PROVIDERS.filter(x => x !== 'generic')), '--output', handle('output', 'reference-output')];
+      object(input, ['task', 'target', 'output', 'digest']);
+      return ['export', handle('task', 'task'), '--provider', choice(input.target, PROVIDERS.filter(x => x !== 'generic')), '--output', handle('output', 'reference-output'), '--expected-digest', digest(input.digest)];
     case 'migration-plan': {
       object(input, ['source', 'workspace', 'provider', 'format', 'expiresAt', 'confirmed']);
       if (input.confirmed !== true) throw new Error('Confirm that you intend a long-term migration.');
