@@ -53,6 +53,12 @@ jobs:
           HANDOFF_DESKTOP_OUTPUT: ${{ runner.temp }}/handoff-windows
       - run: npm install --prefix "$env:RUNNER_TEMP/handoff-smoke-tools" --ignore-scripts --no-audit --no-fund --package-lock=false playwright-core@1.64.1
       - run: node scripts/windows_packaged_smoke.cjs "$env:RUNNER_TEMP/handoff-windows/Cross-Agent Handoff-win32-x64/Cross-Agent Handoff.exe" "$env:RUNNER_TEMP/handoff-smoke-tools/node_modules/playwright-core" "$env:RUNNER_TEMP/handoff-smoke-evidence"
-# Standard public-repository runners only. No caches/artifact uploads, deployment,
-# signing, installation or publication. Bounded synthetic screenshots and package
-# hashes are retained in public job logs; no artifact-storage uploads.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cross-agent-handoff-windows-x64-unsigned
+          path: ${{ runner.temp }}/handoff-windows/cross-agent-handoff-1.0.0-windows-x64-unsigned.zip
+          if-no-files-found: error
+          retention-days: 14
+# Standard public-repository runners only. The artifact is unsigned and intended
+# for review before release publication. Bounded synthetic screenshots and hashes
+# remain in public job logs.
