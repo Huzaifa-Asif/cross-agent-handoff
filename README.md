@@ -17,16 +17,16 @@ Migration preserves the **selected export**, not everything a vendor knows about
 
 You do not need Node, npm, an API key or an AI-account login to use the desktop app. **Python 3.11 or newer must already be installed.** The app never downloads a runtime for you.
 
-1. **Choose your computer.** The downloadable [v1.0.0 Mac app](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases/download/v1.0.0/cross-agent-handoff-1.0.0-macos-arm64-unsigned.zip) is for Apple Silicon (M1 or newer). Windows x64 passed [native Windows CI](https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/runs/41339432706) on the [`feature/windows-desktop` branch](https://github.com/Huzaifa-Asif/cross-agent-handoff/tree/feature/windows-desktop); it is not a released download. There is no released Intel Mac or Linux desktop build.
+1. **Choose your computer.** Download the [v1.0.0 Mac app](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases/download/v1.0.0/cross-agent-handoff-1.0.0-macos-arm64-unsigned.zip) for Apple Silicon (M1 or newer), or the [v1.0.0 Windows x64 portable app](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases/download/v1.0.0/cross-agent-handoff-1.0.0-windows-x64-unsigned.zip). There is no released Intel Mac or Linux desktop build.
 2. **Install Python.** Use [python.org](https://www.python.org/downloads/) and choose Python 3.11 or newer for your computer. On Windows, use the 64-bit installer and enable its Python/PATH option. Close and reopen the app after installation.
-3. **Open the app.** On Mac, extract the ZIP and open **Cross-Agent Handoff.app**. It is unsigned and not notarized. Follow the operating system's security guidance; this project does not ask you to disable protections or bypass a warning.
-4. **Choose a mode.** In the current candidate, choose **Task Hand Off** or **Full Migration**. The existing v1.0.0 download labels these same modes **One task** and **Move my library**; renaming a branch does not change that download.
+3. **Open the app.** Extract the complete ZIP. On Mac, open **Cross-Agent Handoff.app**. On Windows, open **Cross-Agent Handoff.exe** and keep the adjacent resources and DLLs. Both downloads are unsigned. Follow the operating system's security guidance; this project does not ask you to disable protections or bypass a warning.
+4. **Choose a mode.** Choose **Task Hand Off** for one piece of work or **Full Migration** for a deliberate long-term move.
 
 ### Task Hand Off
 
 Use this when you want another assistant to continue **one piece of work**. Enter your goal, useful context and preferences, then save the handoff. Choose your next assistant and save a reference document. Read it, then attach or paste it into that assistant yourself. A repository is optional: a campaign brief or operations handover works too.
 
-The unreleased desktop candidate shows the exact saved handoff in a separate read-only review screen. Review its fields and confirm before exporting; if the saved file changed, reopen and review it again. The current published download has not been replaced by this candidate.
+The desktop app shows the exact saved handoff in a separate read-only review screen. Review its fields and confirm before exporting; if the saved file changed, reopen and review it again.
 
 ### Full Migration
 
@@ -103,7 +103,7 @@ Read [migration instructions](docs/migration.md) for Claude exports, document/ZI
 - **Plugins:** Codex, Claude Code and Cursor packages expose six bounded task MCP tools. They process explicitly supplied text; migration is a separate CLI/desktop filesystem workflow. No host-account history scanning or vendor API connection. [Plugin installation](docs/platform-plugins.md).
 - **Security/privacy:** imported messages, tool calls and preferences are untrusted data. The tool never executes imported commands, fetches links/attachments, writes agent instruction files or transmits data to a vendor. Exported context becomes subject to the destination's policies only when you choose to share it. Redaction is explicit, not comprehensive secret detection. [Security](SECURITY.md), [privacy](docs/privacy.md).
 - **Formats and guides:** [task schema 1.0](docs/schema-v1.json), [task schema 2.0](docs/schema-v2.json), [API](docs/api.md), [task command reference](docs/task-reference.md), [migration format/limits](docs/migration.md), [provider-pair migration guides](docs/migration-guides/README.md).
-- **Platform:** the published release supports macOS/Linux CLI and unsigned macOS arm64 desktop. The Windows candidate targets 64-bit Windows 10 (1809+) / Windows 11 with installed 64-bit Python 3.11+, on a local fixed NTFS volume. It rejects network/UNC paths, junctions, reparse points (including OneDrive placeholders), alternate streams and case-sensitive directories. Native Windows Server 2025 CI passed Python 3.11/3.13 safety and migration checks plus the packaged app journey. Consumer Windows 10/11 device checks, signing and installer behavior remain unverified; no Windows release download is claimed. The Node/npm launcher still supports macOS/Linux only. No automatic runtime installation, background monitor, telemetry or cloud service.
+- **Platform:** the published release includes unsigned macOS arm64 and Windows x64 portable desktop downloads. Windows targets Windows 10 (1809+) / Windows 11 with installed 64-bit Python 3.11+ on a local fixed NTFS volume. It rejects network/UNC paths, junctions, reparse points (including OneDrive placeholders), alternate streams and case-sensitive directories. [Native Windows CI](https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/workflows/windows.yml) covers Python 3.11/3.13 safety and migration checks plus the packaged app journey. Consumer Windows 10/11 devices, signing, SmartScreen and installer behavior remain unverified. No automatic runtime installation, background monitor, telemetry or cloud service.
 
 Development checks:
 

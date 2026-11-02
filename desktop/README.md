@@ -2,35 +2,35 @@
 
 A real Electron desktop app for focused task handoffs and deliberate local migration of selected history exports. It uses the same Python engine as the CLI. There is no AI account sign-in in this app: request an export on your provider's website, then select that downloaded file here.
 
-## Get started on Mac
+## Get started on Mac or Windows
 
-1. Download the macOS ZIP from the project's [GitHub releases](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases), extract it, and open **Cross-Agent Handoff.app**. Use the build matching your Mac's processor; the published build is for Apple silicon.
+1. Download the macOS or Windows x64 ZIP from the project's [GitHub releases](https://github.com/Huzaifa-Asif/cross-agent-handoff/releases). Extract the complete ZIP, then open **Cross-Agent Handoff.app** on Apple silicon Mac or **Cross-Agent Handoff.exe** on Windows.
 2. Python 3.11 or newer must already be installed. The app checks `/opt/homebrew/bin/python3`, `/usr/local/bin/python3` and `/usr/bin/python3`. If none is suitable, install Python from [python.org](https://www.python.org/downloads/macos/), then reopen the app. Node and npm are unnecessary for the packaged app.
-3. In the new candidate, choose **Task Hand Off** to move one task, or **Full Migration** for a deliberate long-term move of your selected exported history. The currently published v1.0 app uses the older labels **One task** and **Move my library**, respectively; the new labels are not yet published.
+3. Choose **Task Hand Off** to move one task, or **Full Migration** for a deliberate long-term move of your selected exported history.
 
-The Mac app is **unsigned and not notarized**. Do not bypass OS security warnings. The app does not download Python or sign into your AI accounts. Windows is currently an **unreleased candidate**; its requirements and testing limits are below.
+The Mac app is **unsigned and not notarized**; the Windows portable app is **unsigned and not an installer**. Do not bypass OS security warnings. The app does not download Python or sign into your AI accounts.
 
 ## Choose your mode
 
-**Task Hand Off:** describe your goal, context and preferences, then save a handoff. In the candidate, saving or opening a handoff shows a read-only snapshot of that exact saved file; the creation form is hidden and its unsaved draft is never exported. Review the goal, context and preferences, expand **Review all saved fields, including code and provenance** for all other supplied data, confirm review, then save a reference document for your next assistant. Export checks the reviewed digest against the saved file; if the file changed or export fails, reopen and review it. Explicitly attach or paste the reviewed document into your next assistant. No repository or code is required. Choose **Create or open another** to return to the separate creation form.
+**Task Hand Off:** describe your goal, context and preferences, then save a handoff. Saving or opening a handoff shows a read-only snapshot of that exact saved file; the creation form is hidden and its unsaved draft is never exported. Review the goal, context and preferences, expand **Review all saved fields, including code and provenance** for all other supplied data, confirm review, then save a reference document for your next assistant. Export checks the reviewed digest against the saved file; if the file changed or export fails, reopen and review it. Explicitly attach or paste the reviewed document into your next assistant. No repository or code is required. Choose **Create or open another** to return to the separate creation form.
 
 Task summaries have a 16 KiB display limit per field with a visible truncation notice. The complete validated bundle (up to 1 MiB) remains available as inert JSON in pages of at most 64 KiB, without dropping code fields, provenance, evidence statuses or omissions. Expiry for Task Hand Off is informational: consider whether old context is still useful before sharing; it does not prevent export. This differs from Full Migration expiry, which blocks processing, redaction and export.
 
 **Full Migration:** first download an official export from your current provider. Select that file in the app, choose its parser (or preserve-only mode), choose a new local library folder, and confirm the long-term move. Start processing once: the app runs bounded batches automatically. Review findings, redact selected fields, and save reviewed portable files. You can pause and resume an existing library.
 
-In the current candidate, inline format guidance explains what each reader can preserve. The app suggests a starting format until you choose one yourself; it then keeps your choice when the source assistant changes. Match the reader to the file contents, not just its filename or provider label. If a pause occurs while saved files are being verified, the app retains the checkpoint and marks findings unverified. It clears old record views and does not immediately start another verification. Choose Resume full migration or Refresh review explicitly to verify the saved library.
+Inline format guidance explains what each reader can preserve. The app suggests a starting format until you choose one yourself; it then keeps your choice when the source assistant changes. Match the reader to the file contents, not just its filename or provider label. If a pause occurs while saved files are being verified, the app retains the checkpoint and marks findings unverified. It clears old record views and does not immediately start another verification. Choose Resume full migration or Refresh review explicitly to verify the saved library.
 
 The expandable **Setup & recovery help — on this computer** stays local and explains runtime readiness, cancelled snapshots and resuming a saved library. It never deletes an incomplete folder for you.
 
 Your files stay local. Full Migration preserves the selected export and available parsed context; it cannot establish that the provider supplied your entire account state. Reference files do not recreate native history, settings or hidden memory. Gemini separately supports importing certain original provider archives; this generated portable library is not that format.
 
-The current candidate offers a guided redaction picker for a title, an entire context/preferences field, or message text. It shows 20 messages per page with clipped text-only previews below 8 KiB in total. Selecting a field does not change data: review the selected field, then apply redaction. The advanced JSON pointer remains available in expandable details. The original export, previous record revisions and existing portable exports remain unchanged; review and save a new portable copy after redaction. This is not secure deletion or automatic secret detection.
+The desktop app offers a guided redaction picker for a title, an entire context/preferences field, or message text. It shows 20 messages per page with clipped text-only previews below 8 KiB in total. Selecting a field does not change data: review the selected field, then apply redaction. The advanced JSON pointer remains available in expandable details. The original export, previous record revisions and existing portable exports remain unchanged; review and save a new portable copy after redaction. This is not secure deletion or automatic secret detection.
 
 Full Migration expiry blocks further processing, redaction and export but does not delete originals. Task Hand Off expiry is informational and shown during review. Redaction creates a redacted copy while retaining the original local snapshot. Portable output excludes original source bytes by default; an explicit option includes them only before any redaction. Review sensitive content before sharing anything.
 
 ## Develop or build
 
-Building requires Node 22.12+, npm and Python 3.11+. The commands below start the Mac development app from this repository. Windows build tooling lives on [`feature/windows-desktop`](https://github.com/Huzaifa-Asif/cross-agent-handoff/tree/feature/windows-desktop), which must be checked out separately; it has not been merged into main.
+Building requires Node 22.12+, npm and Python 3.11+. The commands below start the development app from this repository.
 
 ```sh
 cd desktop
@@ -41,7 +41,7 @@ npm run setup:electron
 npm start
 ```
 
-`setup:electron` explicitly downloads the pinned official development runtime; `npm start` never downloads it. To package the Mac app, run `npm run build:mac` on macOS. To build Windows, use `npm run build:windows` only after checking out the Windows candidate branch. Packaging explicitly obtains the pinned official Electron binary. Set `HANDOFF_DESKTOP_OUTPUT` to a new output directory to preserve earlier artifacts; the default is the task's sibling `desktop-artifacts` directory outside the source tree.
+`setup:electron` explicitly downloads the pinned official development runtime; `npm start` never downloads it. To package the Mac app, run `npm run build:mac` on macOS. To build Windows, use `npm run build:windows`. Packaging explicitly obtains the pinned official Electron binary. Set `HANDOFF_DESKTOP_OUTPUT` to a new output directory to preserve earlier artifacts; the default is the task's sibling `desktop-artifacts` directory outside the source tree.
 
 ## Security model
 
@@ -51,17 +51,15 @@ The GUI paginates 100 record summaries at a time, provides local text search wit
 
 Developer tests use synthetic fixtures and no model/API calls. These checks do not prove another provider will obey its own trust boundaries. Packaged UI tests and actual platform evidence are recorded in release evidence rather than assumed from a successful build.
 
-In the candidate, check the record count before saving a Full Migration copy. With a record count of zero and the original-export checkbox off, the copy contains only metadata; it has no conversation reference documents. Including the original export is a separate, explicit privacy decision. Verification checks content-file hashes and the recorded migration/checkpoint; it does not authenticate metadata or prove that a provider export is complete. A failed new save or verification clears the earlier selection, while cancelling the destination picker retains it. An expired library stays readable for review, but processing, redaction and export are blocked. For large omission reports, see the [read-only inspection recipe](../docs/migration.md#inspecting-a-longer-unit-omission-list-in-the-candidate).
+Check the record count before saving a Full Migration copy. With a record count of zero and the original-export checkbox off, the copy contains only metadata; it has no conversation reference documents. Including the original export is a separate, explicit privacy decision. Verification checks content-file hashes and the recorded migration/checkpoint; it does not authenticate metadata or prove that a provider export is complete. A failed new save or verification clears the earlier selection, while cancelling the destination picker retains it. An expired library stays readable for review, but processing, redaction and export are blocked. For large omission reports, see the [read-only inspection recipe](../docs/migration.md#inspecting-a-longer-unit-omission-list-in-the-candidate).
 
 
-## Windows portable candidate
+## Windows portable app
 
-The same app and shared engine can be packaged for Windows x64 using Node 22.12+ and an explicitly installed Python 3.11+. Start from a Git clone (requires Git), select the candidate branch, then build:
+The same app and shared engine can be packaged for Windows x64 using Node 22.12+ and an explicitly installed Python 3.11+. Start from a Git clone, then build:
 
 ```sh
 # From the root of your Git clone:
-git fetch origin
-git switch feature/windows-desktop
 cd desktop
 npm ci --ignore-scripts
 npm run check
@@ -69,7 +67,7 @@ npm test
 npm run build:windows
 ```
 
-`build:windows` explicitly selects `win32` / `x64`, including on a Mac build host. Set `HANDOFF_DESKTOP_OUTPUT` to a new directory to preserve existing artifacts. Extract the full generated `cross-agent-handoff-<version>-windows-x64-unsigned.zip`, then open `Cross-Agent Handoff.exe`; retain resources, DLLs and license notices beside it. This is an **unreleased, unsigned portable candidate**, not an installer or a natively verified Windows release. Do not bypass OS security warnings.
+`build:windows` explicitly selects `win32` / `x64`, including on a Mac build host. Set `HANDOFF_DESKTOP_OUTPUT` to a new directory to preserve existing artifacts. Extract the full generated `cross-agent-handoff-<version>-windows-x64-unsigned.zip`, then open `Cross-Agent Handoff.exe`; retain resources, DLLs and license notices beside it. This is an **unsigned portable app**, not an installer. Do not bypass OS security warnings.
 
 On Windows, install 64-bit Python 3.11+ yourself from [python.org](https://www.python.org/downloads/). Discovery checks `py -3.11`, `py -3`, then real `python`/`python3` executables on PATH. It requires the shared engine capability probe, pins the discovered interpreter, skips Store `python` aliases and disables Python manager automatic installation. No runtime is silently downloaded. The Windows backend targets Windows 10 1809 or newer and requires a supported local fixed NTFS volume; network/removable paths and reparse points fail closed.
 
@@ -81,4 +79,4 @@ Before claiming native Windows support, run the suite on Windows and inspect the
 
 References: [Electron Packager targets](https://electron.github.io/packager/main/), [packager options](https://electron.github.io/packager/main/interfaces/Options.html), [Python Windows launcher/manager](https://docs.python.org/3/using/windows.html).
 
-Candidate validation: [Windows CI on commit d009d68](https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/runs/41339432706) passed native Python 3.11/3.13 file-safety, task, migration, redaction, pause/resume and retry tests, plus packaged startup and a 1,250-conversation / 2,500-file journey on Windows Server 2025. File selection in that GUI check uses documented synthetic dialog stubs. This does not establish consumer Windows 10/11 coverage, real OS file-picker interaction, signing, SmartScreen or installation behavior. No Windows release has been published.
+[Windows CI](https://github.com/Huzaifa-Asif/cross-agent-handoff/actions/workflows/windows.yml) covers native Python 3.11/3.13 file-safety, task, migration, redaction, pause/resume and retry tests, plus packaged startup, saved-task review, changed-file rejection, and a 1,250-conversation / 2,500-file journey on Windows Server 2025. File selection in that GUI check uses documented synthetic dialog stubs. This does not establish consumer Windows 10/11 coverage, real OS file-picker interaction, signing, SmartScreen or installation behavior.
